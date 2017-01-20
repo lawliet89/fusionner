@@ -40,7 +40,8 @@ pub struct RepositoryConfiguration {
     username: Option<String>,
     password: Option<String>,
     key: Option<String>,
-    checkout_path: String
+    key_passphrase: Option<String>,
+    checkout_path: String,
 }
 
 fn main() {
@@ -61,6 +62,10 @@ fn main() {
     debug!("Configuration parsed {:?}", config);
 
     let repo = clone_or_open(&config.repository);
+    match repo {
+        Err(e) => println!("{:?}", e),
+        Ok(_) => println!("Done"),
+    }
 }
 
 fn read_config(path: &str) -> Result<Config, Box<Error>> {
@@ -78,11 +83,43 @@ fn read_config(path: &str) -> Result<Config, Box<Error>> {
 }
 
 fn clone_or_open(repo_details: &RepositoryConfiguration) -> Result<Repository, git2::Error> {
-    match Repository::open(&repo_details.checkout_path) {
-        Ok(res) => Ok(res),
-        Err(e) => {
-            println!("{:?}", e);
-            Err(e)
-        }
-    }
+    let repo = open(&repo_details.checkout_path).or_else(|err| if err.code() == git2::ErrorCode::NotFound {
+        clone(repo_details)
+    } else {
+        Err(err)
+    });
+    repo
+}
+
+fn open(checkout_path: &str) -> Result<Repository, git2::Error> {
+    Repository::open(checkout_path)
+}
+
+fn clone(repo_details: &RepositoryConfiguration) -> Result<Repository, git2::Error> {
+    let mut remote_callbacks = git2::RemoteCallbacks::new();
+    remote_callbacks.credentials(|_uri, username, cred_type| if cred_type.intersects(git2::SSH_KEY) &&
+                                                    repo_details.key.is_some() {
+            let username = username.or_else(|| match repo_details.username {
+                Some(ref username) => Some(username),
+                None => None,
+            });
+            if let None = username {
+                return Err(git2::Error::from_str("Missing username for git clone"));
+            }
+            git2::Cred::ssh_key(username.unwrap(),
+                                None,
+                                std::path::Path::new(repo_details.key.as_ref().unwrap()),
+                                repo_details.key_passphrase.as_ref().map(|x| &**x))
+        } else if cred_type.intersects(git2::USER_PASS_PLAINTEXT) &&
+                                                           repo_details.username.is_some() {
+            git2::Cred::userpass_plaintext(repo_details.username.as_ref().unwrap(),
+                                           repo_details.password.as_ref().unwrap())
+        } else {
+            Err(git2::Error::from_str("Oh no"))
+        })
+        .sideband_progress(|text: &[u8]| {
+            info!("{:?}", text);
+            true
+        });
+    Err(git2::Error::from_str("Oh no"))
 }

@@ -97,25 +97,24 @@ fn open(checkout_path: &str) -> Result<Repository, git2::Error> {
 
 fn clone(repo_details: &RepositoryConfiguration) -> Result<Repository, git2::Error> {
     let mut remote_callbacks = git2::RemoteCallbacks::new();
-    remote_callbacks.credentials(|_uri, username, cred_type| if cred_type.intersects(git2::SSH_KEY) &&
-                                                    repo_details.key.is_some() {
+    remote_callbacks.credentials(|_uri, username, cred_type| {
             let username = username.or_else(|| match repo_details.username {
                 Some(ref username) => Some(username),
                 None => None,
             });
-            if let None = username {
-                return Err(git2::Error::from_str("Missing username for git clone"));
+            if cred_type.intersects(git2::USERNAME) && username.is_some() {
+                git2::Cred::username(username.as_ref().unwrap())
+            } else if cred_type.intersects(git2::USER_PASS_PLAINTEXT) && username.is_some() && password.is_some() {
+                git2::Cred::userpass_plaintext(username.as_ref().unwrap(),
+                                               repo_details.password.as_ref().unwrap())
+            } else if cred_type.intersects(git2::SSH_KEY) && repo_details.key.is_some() && username.is_some() {
+                git2::Cred::ssh_key(username.unwrap(),
+                                    None,
+                                    std::path::Path::new(repo_details.key.as_ref().unwrap()),
+                                    repo_details.key_passphrase.as_ref().map(|x| &**x))
+            } else {
+                Err(git2::Error::from_str("Missing credentials to authenticate with remote Git repository"))
             }
-            git2::Cred::ssh_key(username.unwrap(),
-                                None,
-                                std::path::Path::new(repo_details.key.as_ref().unwrap()),
-                                repo_details.key_passphrase.as_ref().map(|x| &**x))
-        } else if cred_type.intersects(git2::USER_PASS_PLAINTEXT) &&
-                                                           repo_details.username.is_some() {
-            git2::Cred::userpass_plaintext(repo_details.username.as_ref().unwrap(),
-                                           repo_details.password.as_ref().unwrap())
-        } else {
-            Err(git2::Error::from_str("Oh no"))
         })
         .sideband_progress(|text: &[u8]| {
             info!("{:?}", text);

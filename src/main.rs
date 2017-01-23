@@ -3,6 +3,7 @@ extern crate env_logger;
 extern crate git2;
 #[macro_use]
 extern crate log;
+extern crate regex;
 extern crate rustc_serialize;
 extern crate toml;
 
@@ -30,9 +31,12 @@ struct Args {
     arg_configuration_file: String,
 }
 
+const DEFAULT_INTERVAL: u64 = 30;
+
 #[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
 pub struct Config {
     repository: RepositoryConfiguration,
+    interval: Option<u64>,
 }
 
 #[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
@@ -43,6 +47,9 @@ pub struct RepositoryConfiguration {
     key: Option<String>,
     key_passphrase: Option<String>,
     checkout_path: String,
+    merge_head: Option<String>,
+    watch_heads: Option<String>,
+    target_head: Option<String>,
 }
 
 fn main() {
@@ -63,10 +70,7 @@ fn main() {
     debug!("Configuration parsed {:?}", config);
 
     match process(&config) {
-        Ok(result) => {
-            println!("{}", result);
-            std::process::exit(0);
-        }
+        Ok(_) => std::process::exit(0),
         Err(err) => {
             println!("Error: {}", err);
             std::process::exit(1);
@@ -75,9 +79,17 @@ fn main() {
 
 }
 
-fn process(config: &Config) -> Result<String, String> {
-    let repo = try!(git::clone_or_open(&config.repository).map_err(|e| format!("{:?}", e)));
-    Ok("Done".to_string())
+fn process(config: &Config) -> Result<(), String> {
+    let repo = try!(git::Repository::clone_or_open(&config.repository).map_err(|e| format!("{:?}", e)));
+    let interal_seconds = config.interval.or(Some(DEFAULT_INTERVAL)).unwrap();
+    let interval = std::time::Duration::from_secs(interal_seconds);
+
+    loop {
+        info!("Sleeping for {:?} seconds", interal_seconds);
+        std::thread::sleep(interval);
+    }
+
+    Ok(())
 }
 
 fn read_config(path: &str) -> Result<Config, Box<Error>> {

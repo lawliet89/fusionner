@@ -14,7 +14,6 @@ use std::fs::File;
 use std::io::Read;
 
 use docopt::Docopt;
-use git2::Repository;
 
 const USAGE: &'static str = "
 fusionner
@@ -63,11 +62,22 @@ fn main() {
         .unwrap();
     debug!("Configuration parsed {:?}", config);
 
-    let repo = git::clone_or_open(&config.repository);
-    match repo {
-        Err(e) => println!("{:?}", e),
-        Ok(_) => println!("Done"),
-    }
+    match process(&config) {
+        Ok(result) => {
+            println!("{}", result);
+            std::process::exit(0);
+        }
+        Err(err) => {
+            println!("Error: {}", err);
+            std::process::exit(1);
+        }
+    };
+
+}
+
+fn process(config: &Config) -> Result<String, String> {
+    let repo = try!(git::clone_or_open(&config.repository).map_err(|e| format!("{:?}", e)));
+    Ok("Done".to_string())
 }
 
 fn read_config(path: &str) -> Result<Config, Box<Error>> {

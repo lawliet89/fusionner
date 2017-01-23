@@ -2,7 +2,7 @@ use super::git2;
 use std::path::Path;
 use super::RepositoryConfiguration;
 
-pub fn clone_or_open(repo_details: &RepositoryConfiguration) -> Result<Repository, git2::Error> {
+pub fn clone_or_open(repo_details: &RepositoryConfiguration) -> Result<git2::Repository, git2::Error> {
     let repo = open(&repo_details.checkout_path).or_else(|err| if err.code() == git2::ErrorCode::NotFound {
         info!("Repository not found at {} -- cloning",
               repo_details.checkout_path);
@@ -13,12 +13,12 @@ pub fn clone_or_open(repo_details: &RepositoryConfiguration) -> Result<Repositor
     repo
 }
 
-pub fn open(checkout_path: &str) -> Result<Repository, git2::Error> {
+pub fn open(checkout_path: &str) -> Result<git2::Repository, git2::Error> {
     info!("Opening repository at {}", checkout_path);
-    Repository::open(checkout_path)
+    git2::Repository::open(checkout_path)
 }
 
-pub fn clone(repo_details: &RepositoryConfiguration) -> Result<Repository, git2::Error> {
+pub fn clone(repo_details: &RepositoryConfiguration) -> Result<git2::Repository, git2::Error> {
     debug!("Making remote authentication callbacks");
     let mut remote_callbacks = git2::RemoteCallbacks::new();
     remote_callbacks.credentials(|_uri, username, cred_type| {

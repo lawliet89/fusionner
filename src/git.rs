@@ -40,13 +40,19 @@ impl Repository {
                           repo_details.password.is_some() {
                     git2::Cred::userpass_plaintext(username.as_ref().unwrap(),
                                                    repo_details.password.as_ref().unwrap())
-                } else if cred_type.intersects(git2::SSH_KEY) && repo_details.key.is_some() && username.is_some() {
-                    git2::Cred::ssh_key(username.unwrap(),
-                                        None,
-                                        Path::new(repo_details.key.as_ref().unwrap()),
-                                        repo_details.key_passphrase.as_ref().map(|x| &**x))
+                } else if cred_type.intersects(git2::SSH_KEY) && username.is_some() {
+                    if repo_details.key.is_some() {
+                        git2::Cred::ssh_key(username.unwrap(),
+                                            None,
+                                            Path::new(repo_details.key.as_ref().unwrap()),
+                                            repo_details.key_passphrase.as_ref().map(|x| &**x))
+                    } else {
+                        git2::Cred::ssh_key_from_agent(username.unwrap())
+                    }
+
                 } else {
-                    Err(git2::Error::from_str("Missing credentials to authenticate with remote Git repository"))
+                    let config = git2::Config::open_default()?;
+                    git2::Cred::credential_helper(&config, &repo_details.uri, username)
                 }
             })
             .transfer_progress(|progress| {
@@ -75,10 +81,20 @@ impl Repository {
     }
 
     fn origin_remote(&self) -> Result<git2::Remote, git2::Error> {
-        self.repository.remote("origin")
+        let mut remote = self.repository.find_remote("origin")?;
+        if !remote.connected() {
+            info!("Connecting to remote");
+            // TODO: The library will panic! if credentials are needed...
+            // http://alexcrichton.com/git2-rs/src/git2/remote.rs.html#101
+            // Maybe we have do use https://git-scm.com/book/en/v2/Git-Tools-Credential-Storage
+            remote.connect(git2::Direction::Push)?;
+        }
+        Ok(remote)
     }
 
-    pub fn remote_list(&self) -> Result<&[git2::RemoteHead], git2::Error> {
-        self.origin_remote().and(|remote| remote.list())
+    pub fn list_remote(&mut self) -> Result<(), git2::Error> {
+        let remote = self.origin_remote()?;
+        // let list = try!(remote.list());
+        Ok(())
     }
 }

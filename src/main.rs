@@ -80,11 +80,13 @@ fn main() {
 }
 
 fn process(config: &Config) -> Result<(), String> {
-    let repo = try!(git::Repository::clone_or_open(&config.repository).map_err(|e| format!("{:?}", e)));
+    let mut repo = git::Repository::clone_or_open(&config.repository).map_err(|e| format!("{:?}", e))?;
     let interal_seconds = config.interval.or(Some(DEFAULT_INTERVAL)).unwrap();
     let interval = std::time::Duration::from_secs(interal_seconds);
 
     loop {
+        repo.list_remote().expect("Unable to list remote");
+
         info!("Sleeping for {:?} seconds", interal_seconds);
         std::thread::sleep(interval);
     }

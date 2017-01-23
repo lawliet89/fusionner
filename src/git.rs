@@ -57,13 +57,16 @@ impl Repository {
             })
             .transfer_progress(|progress| {
                 // TODO: Maybe throttle this, or update UI
-                debug!("Received Objects: {}/{}\nIndexed Objects: {}\nIndexed Deltas: {}/{}\nBytes Received: {}",
-                       progress.received_objects(),
-                       progress.total_objects(),
-                       progress.indexed_objects(),
-                       progress.indexed_deltas(),
-                       progress.total_deltas(),
-                       progress.received_bytes());
+                if progress.received_objects() == progress.total_objects() {
+                    debug!("Resolving deltas {}/{}\r", progress.indexed_deltas(),
+                           progress.total_deltas());
+                } else if progress.total_objects() > 0 {
+                    debug!("Received {}/{} objects ({}) in {} bytes\r",
+                           progress.received_objects(),
+                           progress.total_objects(),
+                           progress.indexed_objects(),
+                           progress.received_bytes());
+                }
                 true
             });
 
@@ -87,7 +90,7 @@ impl Repository {
             // TODO: The library will panic! if credentials are needed...
             // http://alexcrichton.com/git2-rs/src/git2/remote.rs.html#101
             // Maybe we have do use https://git-scm.com/book/en/v2/Git-Tools-Credential-Storage
-            remote.connect(git2::Direction::Push)?;
+            remote.connect(git2::Direction::Fetch)?;
         }
         Ok(remote)
     }

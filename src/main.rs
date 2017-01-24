@@ -13,6 +13,7 @@ use std::env;
 use std::error::Error;
 use std::fs::File;
 use std::io::Read;
+use std::marker::PhantomData;
 
 use docopt::Docopt;
 
@@ -34,13 +35,13 @@ struct Args {
 const DEFAULT_INTERVAL: u64 = 30;
 
 #[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
-pub struct Config {
-    repository: RepositoryConfiguration,
+pub struct Config<'config> {
+    repository: RepositoryConfiguration<'config>,
     interval: Option<u64>,
 }
 
 #[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
-pub struct RepositoryConfiguration {
+pub struct RepositoryConfiguration<'config> {
     uri: String,
     username: Option<String>,
     password: Option<String>,
@@ -50,6 +51,7 @@ pub struct RepositoryConfiguration {
     merge_head: Option<String>,
     watch_heads: Option<String>,
     target_head: Option<String>,
+    phantom: PhantomData<&'config String>,
 }
 
 fn main() {

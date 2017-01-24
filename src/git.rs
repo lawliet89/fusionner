@@ -4,15 +4,21 @@ use super::RepositoryConfiguration;
 
 pub struct Repository<'repo> {
     repository: git2::Repository,
-    details: &'repo RepositoryConfiguration,
+    details: &'repo RepositoryConfiguration<'repo>,
 }
 
 impl<'repo> Repository<'repo> {
-    pub fn new(repository: git2::Repository, configuration: &RepositoryConfiguration) -> Repository {
-        Repository { repository: repository, details: configuration }
+    pub fn new(repository: git2::Repository,
+               configuration: &'repo RepositoryConfiguration<'repo>)
+               -> Repository<'repo> {
+        Repository {
+            repository: repository,
+            details: configuration,
+        }
     }
 
-    pub fn clone_or_open(repo_details: &RepositoryConfiguration) -> Result<Repository, git2::Error> {
+    pub fn clone_or_open(repo_details: &'repo RepositoryConfiguration<'repo>)
+                         -> Result<Repository<'repo>, git2::Error> {
         Repository::open(repo_details).or_else(|err| if err.code() == git2::ErrorCode::NotFound {
             info!("Repository not found at {} -- cloning",
                   repo_details.checkout_path);
@@ -22,13 +28,12 @@ impl<'repo> Repository<'repo> {
         })
     }
 
-    pub fn open(repo_details: &RepositoryConfiguration) -> Result<Repository, git2::Error> {
+    pub fn open(repo_details: &'repo RepositoryConfiguration<'repo>) -> Result<Repository<'repo>, git2::Error> {
         info!("Opening repository at {}", &repo_details.checkout_path);
         git2::Repository::open(&repo_details.checkout_path).and_then(|repo| Ok(Repository::new(repo, repo_details)))
     }
 
-    pub fn clone(repo_details: &RepositoryConfiguration) -> Result<Repository, git2::Error> {
-        debug!("Making remote authentication callbacks");
+    pub fn clone(repo_details: &'repo RepositoryConfiguration<'repo>) -> Result<Repository<'repo>, git2::Error> {
         let remote_callbacks = Repository::remote_callbacks(repo_details);
 
         let mut fetch_optoons = git2::FetchOptions::new();
@@ -44,9 +49,11 @@ impl<'repo> Repository<'repo> {
             .and_then(|repo| Ok(Repository::new(repo, repo_details)))
     }
 
-    fn remote_callbacks(repo_details: &RepositoryConfiguration) -> git2::RemoteCallbacks {
+    fn remote_callbacks(repo_details: &'repo RepositoryConfiguration<'repo>) -> git2::RemoteCallbacks<'repo> {
+        debug!("Making remote authentication callbacks");
         let mut remote_callbacks = git2::RemoteCallbacks::new();
-        remote_callbacks.credentials(|_uri, username, cred_type| {
+        let repo_details = repo_details.clone();
+        remote_callbacks.credentials(move |_uri, username, cred_type| {
                 let username = username.or_else(|| match repo_details.username {
                     Some(ref username) => Some(username),
                     None => None,
@@ -75,7 +82,8 @@ impl<'repo> Repository<'repo> {
             .transfer_progress(|progress| {
                 // TODO: Maybe throttle this, or update UI
                 if progress.received_objects() == progress.total_objects() {
-                    debug!("Resolving deltas {}/{}\r", progress.indexed_deltas(),
+                    debug!("Resolving deltas {}/{}\r",
+                           progress.indexed_deltas(),
                            progress.total_deltas());
                 } else if progress.total_objects() > 0 {
                     debug!("Received {}/{} objects ({}) in {} bytes\r",

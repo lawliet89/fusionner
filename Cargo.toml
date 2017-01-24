@@ -6,7 +6,7 @@ authors = ["Yong Wen Chua <me@yongwen.xyz>"]
 [dependencies]
 docopt = "0.7.0"
 env_logger = "0.4.0"
-git2 = "0.6"
+git2 = { path = "git2-rs", version = "0.6" }
 log = "0.3"
 regex = "0.2"
 rustc-serialize = "0.3"

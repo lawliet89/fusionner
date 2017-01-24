@@ -105,31 +105,39 @@ impl<'repo> Repository<'repo> {
         remote_callbacks
     }
 
+    // Get default (origin) remote
     fn origin_remote(&self) -> Result<git2::Remote, git2::Error> {
         let mut remote = self.repository.find_remote("origin")?;
-        let callbacks = Repository::remote_callbacks(self.details);
+        Ok(remote)
+    }
+
+    // Get remote references
+    pub fn remote_refs(&self) -> Result<Vec<RemoteHead>, git2::Error> {
+        let mut remote = self.origin_remote()?;
         if !remote.connected() {
+            let callbacks = Repository::remote_callbacks(self.details);
             info!("Connecting to remote");
             // TODO: The library will panic! if credentials are needed...
             // http://alexcrichton.com/git2-rs/src/git2/remote.rs.html#101
             remote.connect(git2::Direction::Fetch, Some(callbacks), None)?;
         }
-        Ok(remote)
-    }
 
-    pub fn remote_heads(&self) -> Result<Vec<RemoteHead>, git2::Error> {
-        let remote = self.origin_remote()?;
-        info!("Retrieving remote heads");
-        let heads = remote.list()?;
-        Ok(heads.iter()
-            .map(|head| {
-                RemoteHead {
-                    oid: head.oid(),
-                    loid: head.loid(),
-                    name: head.name().to_string(),
-                    symref_target: head.symref_target().and_then(|s| Some(s.to_string())),
-                }
-            })
-            .collect())
+        let result;
+        {
+            info!("Retrieving remote references");
+            let heads = remote.list()?;
+            result = Ok(heads.iter()
+                .map(|head| {
+                    RemoteHead {
+                        oid: head.oid(),
+                        loid: head.loid(),
+                        name: head.name().to_string(),
+                        symref_target: head.symref_target().and_then(|s| Some(s.to_string())),
+                    }
+                })
+                .collect());
+        }
+        remote.disconnect();
+        result
     }
 }

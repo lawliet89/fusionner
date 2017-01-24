@@ -2,8 +2,6 @@ extern crate docopt;
 extern crate env_logger;
 extern crate git2;
 #[macro_use]
-extern crate lazy_static;
-#[macro_use]
 extern crate log;
 extern crate regex;
 extern crate rustc_serialize;
@@ -19,10 +17,6 @@ use std::marker::PhantomData;
 
 use docopt::Docopt;
 use regex::Regex;
-
-lazy_static! {
-    static ref MATCH_ALL: Regex = Regex::new(".+").unwrap();
-}
 
 const USAGE: &'static str = "
 fusionner
@@ -56,9 +50,15 @@ pub struct RepositoryConfiguration<'config> {
     key_passphrase: Option<String>,
     checkout_path: String,
     merge_ref: Option<String>,
-    watch_ref_regex: Option<String>,
+    watch_refs: Vec<WatchReference>,
     target_ref: Option<String>, // TODO: Support specifying branch name instead of references
     _marker: PhantomData<&'config String>,
+}
+
+#[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
+pub enum WatchReference {
+    Regex(String),
+    Exact(String),
 }
 
 fn main() {
@@ -71,7 +71,7 @@ fn main() {
 
     let config = read_config(&args.arg_configuration_file)
         .map_err(|err| {
-            panic!("failed to read configuration file {}: {}",
+            panic!("Failed to read configuration file {}: {}",
                    &args.arg_configuration_file,
                    err)
         })
@@ -95,15 +95,10 @@ fn process(config: &Config) -> Result<(), String> {
     let interal_seconds = config.interval.or(Some(DEFAULT_INTERVAL)).unwrap();
     let interval = std::time::Duration::from_secs(interal_seconds);
 
-    let watch_regex = match config.repository.watch_ref_regex {
-        None => None,
-        Some(ref regex) => Some(Regex::new(regex).map_err(|e| format!("{:?}", e))?),
-    };
-
     let target_ref = resolve_target_ref(&config.repository.target_ref, &mut origin).map_err(|e| format!("{:?}", e))?;
 
     loop {
-        if let Err(e) = process_loop(&repo, &mut origin, &watch_regex) {
+        if let Err(e) = process_loop(&repo, &mut origin) {
             println!("Error: {:?}", e);
         }
         info!("Sleeping for {:?} seconds", interal_seconds);
@@ -113,13 +108,10 @@ fn process(config: &Config) -> Result<(), String> {
     Ok(())
 }
 
-fn process_loop(repo: &git::Repository,
-                remote: &mut git::Remote,
-                watch_regex: &Option<Regex>)
-                -> Result<(), git2::Error> {
+fn process_loop(repo: &git::Repository, remote: &mut git::Remote) -> Result<(), git2::Error> {
     // let remote_ls = remote.remote_ls()?; // Update remote heads
 
-
+    remote.disconnect();
     Ok(())
 }
 
@@ -145,16 +137,17 @@ fn resolve_target_ref(target_ref: &Option<String>, remote: &mut git::Remote) -> 
     }
 }
 
-fn read_config(path: &str) -> Result<Config, Box<Error>> {
+fn read_config(path: &str) -> Result<Config, String> {
     info!("Reading configuration from '{}'", path);
-    let mut file = File::open(&path)?;
+    let mut file = File::open(&path).map_err(|e| format!("{:?}", e))?;
     let mut config_toml = String::new();
-    file.read_to_string(&mut config_toml)?;
+    file.read_to_string(&mut config_toml).map_err(|e| format!("{:?}", e))?;
 
-    let parsed_toml = toml::Parser::new(&config_toml)
-        .parse()
-        .expect("Error parsing config file");
+    let parsed_toml = toml::Parser::new(&config_toml).parse();
+    if let None = parsed_toml {
+        return Err("Error parsing configuration TOML".to_string());
+    }
 
-    let config = toml::Value::Table(parsed_toml);
-    toml::decode(config).ok_or_else(|| panic!("error deserializing config"))
+    let config = toml::Value::Table(parsed_toml.unwrap());
+    rustc_serialize::Decodable::decode(&mut toml::Decoder::new(config)).map_err(|e| format!("{:?}", e))?
 }

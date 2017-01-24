@@ -107,13 +107,14 @@ impl<'repo> Repository<'repo> {
 
     // Get default (origin) remote
     fn origin_remote(&self) -> Result<git2::Remote, git2::Error> {
-        let mut remote = self.repository.find_remote("origin")?;
-        Ok(remote)
+        self.repository.find_remote("origin")
     }
 
-    // Get remote references
-    pub fn remote_refs(&self) -> Result<Vec<RemoteHead>, git2::Error> {
-        let mut remote = self.origin_remote()?;
+    // Internal remote-ls which does not `collect()`
+    // Beware of lifetime issues
+    fn remote_ls<'remote_ls>(&'remote_ls self,
+                             remote: &'remote_ls mut git2::Remote)
+                             -> Result<&[git2::RemoteHead], git2::Error> {
         if !remote.connected() {
             let callbacks = Repository::remote_callbacks(self.details);
             info!("Connecting to remote");
@@ -121,23 +122,28 @@ impl<'repo> Repository<'repo> {
             // http://alexcrichton.com/git2-rs/src/git2/remote.rs.html#101
             remote.connect(git2::Direction::Fetch, Some(callbacks), None)?;
         }
-
-        let result;
+        let heads;
         {
             info!("Retrieving remote references");
-            let heads = remote.list()?;
-            result = Ok(heads.iter()
-                .map(|head| {
-                    RemoteHead {
-                        oid: head.oid(),
-                        loid: head.loid(),
-                        name: head.name().to_string(),
-                        symref_target: head.symref_target().and_then(|s| Some(s.to_string())),
-                    }
-                })
-                .collect());
+            heads = remote.list();
         }
-        remote.disconnect();
-        result
+        heads
+    }
+
+    // Get remote references
+    pub fn remote_refs(&self) -> Result<Vec<RemoteHead>, git2::Error> {
+        let mut remote = self.origin_remote()?;
+        let heads = self.remote_ls(&mut remote)?
+            .iter()
+            .map(|head| {
+                RemoteHead {
+                    oid: head.oid(),
+                    loid: head.loid(),
+                    name: head.name().to_string(),
+                    symref_target: head.symref_target().and_then(|s| Some(s.to_string())),
+                }
+            })
+            .collect();
+        Ok(heads)
     }
 }

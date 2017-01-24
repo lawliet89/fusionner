@@ -95,9 +95,9 @@ fn process(config: &Config) -> Result<(), String> {
 
     let watch_regex = match config.repository.watch_ref_regex {
         None => None,
-        Some(ref regex) => Some(Regex::new(regex).map_err(|e| format!("{:?}", e))?)
+        Some(ref regex) => Some(Regex::new(regex).map_err(|e| format!("{:?}", e))?),
     };
-
+    //
     // let target_head = match config.repository.target_head {
     //     Some(head) => {
     //         info!("Target Reference Specified: {}", head);
@@ -119,9 +119,8 @@ fn process(config: &Config) -> Result<(), String> {
 
 fn process_loop(repo: &git::Repository, watch_regex: &Option<Regex>) -> Result<(), git2::Error> {
     let remote_refs = repo.remote_refs()?;
-    let filtered_heads = remote_refs.iter().filter(|head| {
-        watch_regex.as_ref().unwrap_or(&*MATCH_ALL).is_match(&head.name)
-    });
+    let filtered_heads = remote_refs.iter()
+        .filter(|head| watch_regex.as_ref().unwrap_or(&*MATCH_ALL).is_match(&head.name));
 
     Ok(())
 }

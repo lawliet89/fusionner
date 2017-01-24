@@ -2,17 +2,18 @@ use super::git2;
 use std::path::Path;
 use super::RepositoryConfiguration;
 
-pub struct Repository {
+pub struct Repository<'repo> {
     repository: git2::Repository,
+    details: &'repo RepositoryConfiguration,
 }
 
-impl Repository {
-    pub fn new(repository: git2::Repository) -> Repository {
-        Repository { repository: repository }
+impl<'repo> Repository<'repo> {
+    pub fn new(repository: git2::Repository, configuration: &RepositoryConfiguration) -> Repository {
+        Repository { repository: repository, details: configuration }
     }
 
     pub fn clone_or_open(repo_details: &RepositoryConfiguration) -> Result<Repository, git2::Error> {
-        Repository::open(&repo_details.checkout_path).or_else(|err| if err.code() == git2::ErrorCode::NotFound {
+        Repository::open(repo_details).or_else(|err| if err.code() == git2::ErrorCode::NotFound {
             info!("Repository not found at {} -- cloning",
                   repo_details.checkout_path);
             Repository::clone(repo_details)
@@ -21,13 +22,29 @@ impl Repository {
         })
     }
 
-    pub fn open(checkout_path: &str) -> Result<Repository, git2::Error> {
-        info!("Opening repository at {}", checkout_path);
-        git2::Repository::open(checkout_path).and_then(|repo| Ok(Repository::new(repo)))
+    pub fn open(repo_details: &RepositoryConfiguration) -> Result<Repository, git2::Error> {
+        info!("Opening repository at {}", &repo_details.checkout_path);
+        git2::Repository::open(&repo_details.checkout_path).and_then(|repo| Ok(Repository::new(repo, repo_details)))
     }
 
     pub fn clone(repo_details: &RepositoryConfiguration) -> Result<Repository, git2::Error> {
         debug!("Making remote authentication callbacks");
+        let remote_callbacks = Repository::remote_callbacks(repo_details);
+
+        let mut fetch_optoons = git2::FetchOptions::new();
+        fetch_optoons.remote_callbacks(remote_callbacks);
+
+        let mut repo_builder = git2::build::RepoBuilder::new();
+        repo_builder.fetch_options(fetch_optoons);
+
+        info!("Cloning repository from {} into {}",
+              repo_details.uri,
+              repo_details.checkout_path);
+        repo_builder.clone(&repo_details.uri, &Path::new(&repo_details.checkout_path))
+            .and_then(|repo| Ok(Repository::new(repo, repo_details)))
+    }
+
+    fn remote_callbacks(repo_details: &RepositoryConfiguration) -> git2::RemoteCallbacks {
         let mut remote_callbacks = git2::RemoteCallbacks::new();
         remote_callbacks.credentials(|_uri, username, cred_type| {
                 let username = username.or_else(|| match repo_details.username {
@@ -69,28 +86,18 @@ impl Repository {
                 }
                 true
             });
-
-        let mut fetch_optoons = git2::FetchOptions::new();
-        fetch_optoons.remote_callbacks(remote_callbacks);
-
-        let mut repo_builder = git2::build::RepoBuilder::new();
-        repo_builder.fetch_options(fetch_optoons);
-
-        info!("Cloning repository from {} into {}",
-              repo_details.uri,
-              repo_details.checkout_path);
-        repo_builder.clone(&repo_details.uri, &Path::new(&repo_details.checkout_path))
-            .and_then(|repo| Ok(Repository::new(repo)))
+        remote_callbacks
     }
 
     fn origin_remote(&self) -> Result<git2::Remote, git2::Error> {
         let mut remote = self.repository.find_remote("origin")?;
+        let callbacks = Repository::remote_callbacks(self.details);
         if !remote.connected() {
             info!("Connecting to remote");
             // TODO: The library will panic! if credentials are needed...
             // http://alexcrichton.com/git2-rs/src/git2/remote.rs.html#101
             // Maybe we have do use https://git-scm.com/book/en/v2/Git-Tools-Credential-Storage
-            remote.connect(git2::Direction::Fetch)?;
+            remote.connect(git2::Direction::Fetch, None, None)?;
         }
         Ok(remote)
     }

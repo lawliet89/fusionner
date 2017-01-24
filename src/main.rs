@@ -57,8 +57,8 @@ pub struct RepositoryConfiguration<'config> {
     checkout_path: String,
     merge_ref: Option<String>,
     watch_ref_regex: Option<String>,
-    target_head: Option<String>, // TODO: Support specifying branch name instead of references
-    phantom: PhantomData<&'config String>,
+    target_ref: Option<String>, // TODO: Support specifying branch name instead of references
+    _marker: PhantomData<&'config String>,
 }
 
 fn main() {
@@ -90,6 +90,8 @@ fn main() {
 
 fn process(config: &Config) -> Result<(), String> {
     let repo = git::Repository::clone_or_open(&config.repository).map_err(|e| format!("{:?}", e))?;
+    let mut origin = repo.origin_remote().map_err(|e| format!("{:?}", e))?;
+
     let interal_seconds = config.interval.or(Some(DEFAULT_INTERVAL)).unwrap();
     let interval = std::time::Duration::from_secs(interal_seconds);
 
@@ -97,17 +99,11 @@ fn process(config: &Config) -> Result<(), String> {
         None => None,
         Some(ref regex) => Some(Regex::new(regex).map_err(|e| format!("{:?}", e))?),
     };
-    //
-    // let target_head = match config.repository.target_head {
-    //     Some(head) => {
-    //         info!("Target Reference Specified: {}", head);
-    //         let remote_refs = repo.remote_refs().map_err(|e| format!("{:?}", e))?;
-    //
-    //     }
-    // };
+
+    let target_ref = resolve_target_ref(&config.repository.target_ref, &mut origin).map_err(|e| format!("{:?}", e))?;
 
     loop {
-        if let Err(e) = process_loop(&repo, &watch_regex) {
+        if let Err(e) = process_loop(&repo, &mut origin, &watch_regex) {
             println!("Error: {:?}", e);
         }
         info!("Sleeping for {:?} seconds", interal_seconds);
@@ -117,12 +113,36 @@ fn process(config: &Config) -> Result<(), String> {
     Ok(())
 }
 
-fn process_loop(repo: &git::Repository, watch_regex: &Option<Regex>) -> Result<(), git2::Error> {
-    let remote_refs = repo.remote_refs()?;
-    let filtered_heads = remote_refs.iter()
-        .filter(|head| watch_regex.as_ref().unwrap_or(&*MATCH_ALL).is_match(&head.name));
+fn process_loop(repo: &git::Repository,
+                remote: &mut git::Remote,
+                watch_regex: &Option<Regex>)
+                -> Result<(), git2::Error> {
+    // let remote_ls = remote.remote_ls()?; // Update remote heads
+
 
     Ok(())
+}
+
+fn resolve_target_ref(target_ref: &Option<String>, remote: &mut git::Remote) -> Result<String, git2::Error> {
+    match target_ref {
+        &Some(ref reference) => {
+            info!("Target Reference Specified: {}", reference);
+            let remote_refs = remote.remote_ls()?;
+            if let None = remote_refs.iter().find(|head| head.name() == "reference") {
+                return Err(git2::Error::from_str(&format!("Could not find {} on remote", reference)));
+            }
+            Ok(reference.to_string())
+        }
+        &None => {
+            let head = remote.head()?;
+            if let None = head {
+                return Err(git2::Error::from_str("Could not find a default HEAD on remote"));
+            }
+            let head = head.unwrap();
+            info!("Target Reference set to remote HEAD: {}", head);
+            Ok(head)
+        }
+    }
 }
 
 fn read_config(path: &str) -> Result<Config, Box<Error>> {

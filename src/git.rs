@@ -3,16 +3,13 @@ use std::path::Path;
 use super::RepositoryConfiguration;
 
 pub struct Repository<'repo> {
-    repository: git2::Repository,
+    pub repository: git2::Repository,
     details: &'repo RepositoryConfiguration<'repo>,
 }
 
-#[derive(Debug)]
-pub struct RemoteHead {
-    pub oid: git2::Oid,
-    pub loid: git2::Oid,
-    pub name: String,
-    pub symref_target: Option<String>,
+pub struct Remote<'repo> {
+    pub remote: git2::Remote<'repo>,
+    repository: &'repo Repository<'repo>,
 }
 
 impl<'repo> Repository<'repo> {
@@ -106,44 +103,56 @@ impl<'repo> Repository<'repo> {
     }
 
     // Get default (origin) remote
-    fn origin_remote(&self) -> Result<git2::Remote, git2::Error> {
-        self.repository.find_remote("origin")
+    pub fn origin_remote(&self) -> Result<Remote, git2::Error> {
+        Ok(Remote {
+            remote: self.repository.find_remote("origin")?,
+            repository: self,
+        })
     }
+}
 
-    // Internal remote-ls which does not `collect()`
-    // Beware of lifetime issues
-    fn remote_ls<'remote_ls>(&'remote_ls self,
-                             remote: &'remote_ls mut git2::Remote)
-                             -> Result<&[git2::RemoteHead], git2::Error> {
-        if !remote.connected() {
-            let callbacks = Repository::remote_callbacks(self.details);
+impl<'repo> Remote<'repo> {
+    pub fn connect(&mut self) -> Result<(), git2::Error> {
+        if !self.remote.connected() {
+            let callbacks = Repository::remote_callbacks(self.repository.details);
             info!("Connecting to remote");
             // TODO: The library will panic! if credentials are needed...
             // http://alexcrichton.com/git2-rs/src/git2/remote.rs.html#101
-            remote.connect(git2::Direction::Fetch, Some(callbacks), None)?;
+            self.remote.connect(git2::Direction::Fetch, Some(callbacks), None)
+        } else {
+            Ok(())
         }
+    }
+
+    pub fn disconnect(&mut self) {
+        self.remote.disconnect();
+    }
+
+    pub fn remote_ls(&mut self) -> Result<&[git2::RemoteHead], git2::Error> {
+        self.connect()?;
         let heads;
         {
-            info!("Retrieving remote references");
-            heads = remote.list();
+            info!("Retrieving remote references `git ls-remote`");
+            heads = self.remote.list();
         }
         heads
     }
 
-    // Get remote references
-    pub fn remote_refs(&self) -> Result<Vec<RemoteHead>, git2::Error> {
-        let mut remote = self.origin_remote()?;
-        let heads = self.remote_ls(&mut remote)?
-            .iter()
-            .map(|head| {
-                RemoteHead {
-                    oid: head.oid(),
-                    loid: head.loid(),
-                    name: head.name().to_string(),
-                    symref_target: head.symref_target().and_then(|s| Some(s.to_string())),
-                }
-            })
-            .collect();
-        Ok(heads)
+    // Get the refspecs to this remote
+    pub fn refspecs(&self) -> git2::Refspecs {
+        self.remote.refspecs()
+    }
+
+    // Get the remotem reference of renote HEAD (i.e. default branch)
+    pub fn head(&mut self) -> Result<Option<String>, git2::Error> {
+        Ok(Remote::resolve_head(self.remote_ls()?))
+    }
+
+    // Resolve the remote HEAD (i.e. default branch) from a list of heads
+    // and return the remote reference
+    pub fn resolve_head(heads: &[git2::RemoteHead]) -> Option<String> {
+        heads.iter()
+            .find(|head| head.name() == "HEAD" && head.symref_target().is_some())
+            .and_then(|head| Some(head.symref_target().unwrap().to_string()))
     }
 }

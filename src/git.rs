@@ -7,6 +7,14 @@ pub struct Repository<'repo> {
     details: &'repo RepositoryConfiguration<'repo>,
 }
 
+#[derive(Debug)]
+pub struct RemoteHead {
+    pub oid: git2::Oid,
+    pub loid: git2::Oid,
+    pub name: String,
+    pub symref_target: Option<String>,
+}
+
 impl<'repo> Repository<'repo> {
     pub fn new(repository: git2::Repository,
                configuration: &'repo RepositoryConfiguration<'repo>)
@@ -104,15 +112,24 @@ impl<'repo> Repository<'repo> {
             info!("Connecting to remote");
             // TODO: The library will panic! if credentials are needed...
             // http://alexcrichton.com/git2-rs/src/git2/remote.rs.html#101
-            // Maybe we have do use https://git-scm.com/book/en/v2/Git-Tools-Credential-Storage
-            remote.connect(git2::Direction::Fetch, None, None)?;
+            remote.connect(git2::Direction::Fetch, Some(callbacks), None)?;
         }
         Ok(remote)
     }
 
-    pub fn list_remote(&mut self) -> Result<(), git2::Error> {
+    pub fn remote_heads(&self) -> Result<Vec<RemoteHead>, git2::Error> {
         let remote = self.origin_remote()?;
-        // let list = try!(remote.list());
-        Ok(())
+        info!("Retrieving remote heads");
+        let heads = remote.list()?;
+        Ok(heads.iter()
+            .map(|head| {
+                RemoteHead {
+                    oid: head.oid(),
+                    loid: head.loid(),
+                    name: head.name().to_string(),
+                    symref_target: head.symref_target().and_then(|s| Some(s.to_string())),
+                }
+            })
+            .collect())
     }
 }

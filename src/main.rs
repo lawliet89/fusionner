@@ -74,25 +74,34 @@ fn main() {
     match process(&config) {
         Ok(_) => std::process::exit(0),
         Err(err) => {
-            println!("Error: {}", err);
+            println!("Error: {:?}", err);
             std::process::exit(1);
         }
     };
 
 }
 
-fn process(config: &Config) -> Result<(), String> {
-    let mut repo = git::Repository::clone_or_open(&config.repository).map_err(|e| format!("{:?}", e))?;
+fn process(config: &Config) -> Result<(), git2::Error> {
+    let repo = git::Repository::clone_or_open(&config.repository)?;
     let interal_seconds = config.interval.or(Some(DEFAULT_INTERVAL)).unwrap();
     let interval = std::time::Duration::from_secs(interal_seconds);
 
     loop {
-        repo.list_remote().expect("Unable to list remote");
-
+        if let Err(e) = process_loop(&repo) {
+            println!("Error: {:?}", e);
+        }
         info!("Sleeping for {:?} seconds", interal_seconds);
         std::thread::sleep(interval);
     }
 
+    Ok(())
+}
+
+fn process_loop(repo: &git::Repository) -> Result<(), git2::Error> {
+    let remote_heads = repo.remote_heads()?;
+    for head in remote_heads {
+        println!("{:?}", head);
+    }
     Ok(())
 }
 

@@ -10,7 +10,6 @@ extern crate toml;
 mod git;
 
 use std::env;
-use std::error::Error;
 use std::fs::File;
 use std::io::Read;
 use std::marker::PhantomData;
@@ -109,7 +108,7 @@ fn process(config: &Config) -> Result<(), String> {
 }
 
 fn process_loop(repo: &git::Repository, remote: &mut git::Remote) -> Result<(), git2::Error> {
-    // let remote_ls = remote.remote_ls()?; // Update remote heads
+    let remote_ls = remote.remote_ls()?; // Update remote heads
 
     remote.disconnect();
     Ok(())
@@ -120,7 +119,7 @@ fn resolve_target_ref(target_ref: &Option<String>, remote: &mut git::Remote) -> 
         &Some(ref reference) => {
             info!("Target Reference Specified: {}", reference);
             let remote_refs = remote.remote_ls()?;
-            if let None = remote_refs.iter().find(|head| head.name() == "reference") {
+            if let None = remote_refs.iter().find(|head| &head.name == reference) {
                 return Err(git2::Error::from_str(&format!("Could not find {} on remote", reference)));
             }
             Ok(reference.to_string())

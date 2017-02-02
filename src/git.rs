@@ -19,7 +19,20 @@ pub struct RemoteHead {
     pub oid: git2::Oid,
     pub loid: git2::Oid,
     pub name: String,
-    pub symref_target: Option<String>
+    pub symref_target: Option<String>,
+}
+
+impl RemoteHead {
+    pub fn flatten(&self) -> &str {
+        match self.symref_target {
+            Some(ref s) => s,
+            _ => &self.name
+        }
+    }
+
+    pub fn flatten_clone(&self) -> String {
+        self.flatten().to_string()
+    }
 }
 
 impl<'repo> Repository<'repo> {
@@ -141,15 +154,17 @@ impl<'repo> Remote<'repo> {
 
     pub fn remote_ls(&mut self) -> Result<Vec<RemoteHead>, git2::Error> {
         let heads = self.remote_ls_raw()?;
-        Ok(heads.iter().map(|ref head| {
-            RemoteHead {
-                is_local: head.is_local(),
-                oid: head.oid(),
-                loid: head.loid(),
-                name: head.name().to_string(),
-                symref_target: head.symref_target().map(|s| s.to_string())
-            }
-        }).collect())
+        Ok(heads.iter()
+            .map(|ref head| {
+                RemoteHead {
+                    is_local: head.is_local(),
+                    oid: head.oid(),
+                    loid: head.loid(),
+                    name: head.name().to_string(),
+                    symref_target: head.symref_target().map(|s| s.to_string()),
+                }
+            })
+            .collect())
     }
 
     // Get the remote reference of renote HEAD (i.e. default branch)

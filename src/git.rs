@@ -126,8 +126,6 @@ impl<'repo> Remote<'repo> {
                                 -> Result<git2::RemoteConnection<'repo, 'connection, 'connection>, git2::Error> {
         let callbacks = Repository::remote_callbacks(self.repository.details);
         info!("Connecting to remote");
-        // TODO: The library will panic! if credentials are needed...
-        // http://alexcrichton.com/git2-rs/src/git2/remote.rs.html#101
         self.remote.connect(git2::Direction::Fetch, Some(callbacks), None)
     }
 

@@ -61,30 +61,34 @@ pub enum WatchReference {
 }
 
 fn main() {
-    env::set_var("RUST_LOG", "fusionner=debug"); // TODO: use a proper logger
+    let return_code;
+    {
+        env::set_var("RUST_LOG", "fusionner=debug"); // TODO: use a proper logger
 
-    env_logger::init().unwrap();
-    let args: Args = Docopt::new(USAGE)
-        .and_then(|d| d.decode())
-        .unwrap_or_else(|e| e.exit());
+        env_logger::init().unwrap();
+        let args: Args = Docopt::new(USAGE)
+            .and_then(|d| d.decode())
+            .unwrap_or_else(|e| e.exit());
 
-    let config = read_config(&args.arg_configuration_file)
-        .map_err(|err| {
-            panic!("Failed to read configuration file {}: {}",
-                   &args.arg_configuration_file,
-                   err)
-        })
-        .unwrap();
-    debug!("Configuration parsed {:?}", config);
+        let config = read_config(&args.arg_configuration_file)
+            .map_err(|err| {
+                panic!("Failed to read configuration file {}: {}",
+                       &args.arg_configuration_file,
+                       err)
+            })
+            .unwrap();
+        debug!("Configuration parsed {:?}", config);
 
-    match process(&config) {
-        Ok(_) => std::process::exit(0),
-        Err(err) => {
-            println!("Error: {}", err);
-            std::process::exit(1);
-        }
-    };
-
+        return_code = match process(&config) {
+            Ok(_) => 0,
+            Err(err) => {
+                println!("Error: {}", err);
+                1
+            }
+        };
+    }
+    println!("Exiting with code {}", return_code);
+    std::process::exit(return_code);
 }
 
 fn process(config: &Config) -> Result<(), String> {

@@ -65,7 +65,7 @@ pub enum WatchReferenceConfiguration {
 /// "Compiled" watch reference
 struct WatchReferences {
     regex_set: RegexSet,
-    exact_list: Vec<String>
+    exact_list: Vec<String>,
 }
 
 fn main() {
@@ -127,10 +127,13 @@ fn process_loop(config: &Config,
 
     let remote_ls = remote.remote_ls()?; // Update remote heads
     let remote_ls: Vec<String> = remote_ls.iter().map(|r| r.flatten_clone()).collect();
-    let watch_refs = compile_watch_refs(&config.repository.watch_refs).map_err(|e| git2::Error::from_str(&format!("{:?}", e)))?;
+    let watch_refs =
+        compile_watch_refs(&config.repository.watch_refs).map_err(|e| git2::Error::from_str(&format!("{:?}", e)))?;
     let watch_heads = resolve_watch_refs(&watch_refs, &remote_ls);
 
-    info!("Remote references matching watch references ({}): {:?}", watch_heads.len(), watch_heads);
+    info!("Remote references matching watch references ({}): {:?}",
+          watch_heads.len(),
+          watch_heads);
 
     remote.disconnect();
     Ok(())
@@ -159,26 +162,30 @@ fn resolve_target_ref(target_ref: &Option<String>, remote: &mut git::Remote) -> 
 }
 
 fn compile_watch_refs(watchrefs_config: &[WatchReferenceConfiguration]) -> Result<WatchReferences, regex::Error> {
-    let exact_list: Vec<String> = watchrefs_config.iter().map(|watchref| {
-        match watchref {
+    let exact_list: Vec<String> = watchrefs_config.iter()
+        .map(|watchref| match watchref {
             &WatchReferenceConfiguration::Exact(ref s) => Some(s.to_string()),
-            _ => None
-        }
-    }).filter(|o| o.is_some()).map(|o| o.unwrap()).collect();
+            _ => None,
+        })
+        .filter(|o| o.is_some())
+        .map(|o| o.unwrap())
+        .collect();
     info!("{} Exact Watch References", exact_list.len());
 
-    let regex_set: Vec<String> = watchrefs_config.iter().map(|watchref| {
-        match watchref {
+    let regex_set: Vec<String> = watchrefs_config.iter()
+        .map(|watchref| match watchref {
             &WatchReferenceConfiguration::Regex(ref regex) => Some(regex.to_string()),
-            _ => None
-        }
-    }).filter(|o| o.is_some()).map(|o| o.unwrap()).collect();
+            _ => None,
+        })
+        .filter(|o| o.is_some())
+        .map(|o| o.unwrap())
+        .collect();
     info!("{} Regex Watch References", regex_set.len());
     let regex_set = RegexSet::new(regex_set)?;
 
     Ok(WatchReferences {
         regex_set: regex_set,
-        exact_list: exact_list
+        exact_list: exact_list,
     })
 }
 

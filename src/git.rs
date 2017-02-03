@@ -26,7 +26,7 @@ impl RemoteHead {
     pub fn flatten(&self) -> &str {
         match self.symref_target {
             Some(ref s) => s,
-            _ => &self.name
+            _ => &self.name,
         }
     }
 
@@ -135,7 +135,7 @@ impl<'repo> Repository<'repo> {
 }
 
 impl<'repo> Remote<'repo> {
-    pub fn connect<'connection>(&mut self)
+    pub fn connect<'connection>(&'connection mut self)
                                 -> Result<git2::RemoteConnection<'repo, 'connection, 'connection>, git2::Error> {
         let callbacks = Repository::remote_callbacks(self.repository.details);
         info!("Connecting to remote");
@@ -146,16 +146,12 @@ impl<'repo> Remote<'repo> {
         self.remote.disconnect();
     }
 
-    fn remote_ls_raw(&mut self) -> Result<&[git2::RemoteHead], git2::Error> {
-        let _connection = self.connect()?;
-        info!("Retrieving remote references `git ls-remote`");
-        self.remote.list()
-    }
-
     pub fn remote_ls(&mut self) -> Result<Vec<RemoteHead>, git2::Error> {
-        let heads = self.remote_ls_raw()?;
+        let mut connection = self.connect()?;
+        info!("Retrieving remote references `git ls-remote`");
+        let heads = connection.list()?;
         Ok(heads.iter()
-            .map(|ref head| {
+            .map(|head| {
                 RemoteHead {
                     is_local: head.is_local(),
                     oid: head.oid(),
@@ -169,7 +165,10 @@ impl<'repo> Remote<'repo> {
 
     // Get the remote reference of renote HEAD (i.e. default branch)
     pub fn head(&mut self) -> Result<Option<String>, git2::Error> {
-        Ok(Remote::resolve_head(self.remote_ls_raw()?))
+        let mut connection = self.connect()?;
+        info!("Retrieving remote references `git ls-remote`");
+        let heads = connection.list()?;
+        Ok(Remote::resolve_head(heads))
     }
 
     // Resolve the remote HEAD (i.e. default branch) from a list of heads

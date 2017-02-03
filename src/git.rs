@@ -1,6 +1,7 @@
 use super::git2;
 use std::vec::Vec;
 use std::path::Path;
+use std::str;
 use super::RepositoryConfiguration;
 
 pub struct Repository<'repo> {
@@ -121,6 +122,18 @@ impl<'repo> Repository<'repo> {
                            progress.received_bytes());
                 }
                 true
+            })
+            .sideband_progress(|data| {
+                debug!("remote: {}", str::from_utf8(data).unwrap());
+                true
+            })
+            .update_tips(|refname, a, b| {
+                if a.is_zero() {
+                    debug!("[new]     {:20} {}", b, refname);
+                } else {
+                    debug!("[updated] {:10}..{:10} {}", a, b, refname);
+                }
+                true
             });
         remote_callbacks
     }
@@ -177,5 +190,16 @@ impl<'repo> Remote<'repo> {
         heads.iter()
             .find(|head| head.name() == "HEAD" && head.symref_target().is_some())
             .and_then(|head| Some(head.symref_target().unwrap().to_string()))
+    }
+
+    pub fn fetch(&mut self, refspecs: &[&str]) -> Result<(), git2::Error> {
+        let mut fetch_options = git2::FetchOptions::new();
+        let callbacks = Repository::remote_callbacks(self.repository.details);
+        fetch_options.remote_callbacks(callbacks)
+            .prune(git2::FetchPrune::On);
+
+        self.remote.fetch(refspecs, Some(&mut fetch_options), None)?;
+        self.remote.disconnect();
+        Ok(())
     }
 }

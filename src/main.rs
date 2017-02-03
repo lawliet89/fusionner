@@ -155,9 +155,12 @@ fn process_loop(config: &Config,
 
     let watch_heads = resolve_watch_refs(&watch_refs, &remote_ls);
 
-    info!("Remote references matching watch references ({}): {:?}",
-          watch_heads.len(),
-          watch_heads);
+    info!("{} remote references matching watch references",
+          watch_heads.len());
+    debug!("{:?}", watch_heads);
+
+    info!("Fetching matching remotes");
+    remote.fetch(&watch_heads.iter().map(|s| s.as_str()).collect::<Vec<&str>>())?;
 
     remote.disconnect();
     Ok(())

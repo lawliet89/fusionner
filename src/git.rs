@@ -124,7 +124,7 @@ impl<'repo> Repository<'repo> {
                 true
             })
             .sideband_progress(|data| {
-                debug!("remote: {}", str::from_utf8(data).unwrap());
+                debug!("remote: {}", str::from_utf8(data).unwrap_or(""));
                 true
             })
             .update_tips(|refname, a, b| {

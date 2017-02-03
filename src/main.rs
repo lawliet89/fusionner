@@ -150,16 +150,19 @@ fn process_loop(config: &Config,
                 target_ref: &str)
                 -> Result<(), git2::Error> {
 
+    info!("Retrieving remote heads");
     let remote_ls = remote.remote_ls()?; // Update remote heads
     let remote_ls: Vec<String> = remote_ls.iter().map(|r| r.flatten_clone()).collect();
+    info!("{} remote heads found", remote_ls.len());
+    debug!("{:?}", remote_ls);
 
     let watch_heads = resolve_watch_refs(&watch_refs, &remote_ls);
 
-    info!("{} remote references matching watch references",
+    info!("{} remote references matched watch references",
           watch_heads.len());
     debug!("{:?}", watch_heads);
 
-    info!("Fetching matching remotes");
+    info!("Fetching matched remotes");
     remote.fetch(&watch_heads.iter().map(|s| s.as_str()).collect::<Vec<&str>>())?;
 
     remote.disconnect();

@@ -23,15 +23,22 @@ const USAGE: &'static str = "
 fusionner
 
 Usage:
-  fusionner <configuration-file>
-  rcanary (-h | --help)
+  fusionner [options] <configuration-file> (<watch-ref> | --watch-regex=<regex>)...
+  fusionner -h | --help
+
+Use with a <configuration-file> to specify your repository information.
+Use <watch-ref> to define the Git references to watch for commits.
+Use --watch-regex=<regex> instead to specify references that matches the Regex
+
 Options:
-  -h --help     Show this screen.
+  -h --help    Show this screen.
 ";
 
 #[derive(RustcDecodable, Debug)]
 struct Args {
     arg_configuration_file: String,
+    flag_watch_regex: Vec<String>,
+    arg_watch_ref: Vec<String>,
 }
 
 const DEFAULT_INTERVAL: u64 = 30;
@@ -51,21 +58,29 @@ pub struct RepositoryConfiguration<'config> {
     key_passphrase: Option<String>,
     checkout_path: String,
     merge_ref: Option<String>,
-    watch_refs: Vec<WatchReferenceConfiguration>,
     target_ref: Option<String>, // TODO: Support specifying branch name instead of references
     _marker: PhantomData<&'config String>,
 }
 
-#[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
-pub enum WatchReferenceConfiguration {
-    Exact(String),
-    Regex(String),
-}
-
 /// "Compiled" watch reference
-struct WatchReferences {
+#[derive(Debug)]
+pub struct WatchReferences {
     regex_set: RegexSet,
     exact_list: Vec<String>,
+}
+
+impl WatchReferences {
+    fn new<T: AsRef<str>>(exacts: &[T], regexes: &[T]) -> Result<WatchReferences, regex::Error>
+        where T: std::fmt::Display
+    {
+        let exact_list = exacts.iter().map(|s| s.to_string()).collect();
+        let regex_set = RegexSet::new(regexes)?;
+
+        Ok(WatchReferences {
+            regex_set: regex_set,
+            exact_list: exact_list,
+        })
+    }
 }
 
 fn main() {
@@ -78,6 +93,8 @@ fn main() {
             .and_then(|d| d.decode())
             .unwrap_or_else(|e| e.exit());
 
+        debug!("Arguments parsed: {:?}", args);
+
         let config = read_config(&args.arg_configuration_file)
             .map_err(|err| {
                 panic!("Failed to read configuration file {}: {}",
@@ -87,7 +104,14 @@ fn main() {
             .unwrap();
         debug!("Configuration parsed {:?}", config);
 
-        return_code = match process(&config) {
+        let watch_refs = WatchReferences::new(args.arg_watch_ref.as_slice(),
+                                              args.flag_watch_regex.as_slice())
+            .map_err(|err| panic!("Failed to compile watch reference regex: {:?}", err))
+            .unwrap();
+
+        info!("Watch Referemces: {:?}", watch_refs);
+
+        return_code = match process(&config, &watch_refs) {
             Ok(_) => 0,
             Err(err) => {
                 println!("Error: {}", err);
@@ -99,7 +123,7 @@ fn main() {
     std::process::exit(return_code);
 }
 
-fn process(config: &Config) -> Result<(), String> {
+fn process(config: &Config, watch_refs: &WatchReferences) -> Result<(), String> {
     let repo = git::Repository::clone_or_open(&config.repository).map_err(|e| format!("{:?}", e))?;
     let mut origin = repo.origin_remote().map_err(|e| format!("{:?}", e))?;
 
@@ -109,7 +133,7 @@ fn process(config: &Config) -> Result<(), String> {
     let target_ref = resolve_target_ref(&config.repository.target_ref, &mut origin).map_err(|e| format!("{:?}", e))?;
 
     loop {
-        if let Err(e) = process_loop(&config, &repo, &mut origin, &target_ref) {
+        if let Err(e) = process_loop(&config, &repo, &mut origin, watch_refs, &target_ref) {
             println!("Error: {:?}", e);
         }
         info!("Sleeping for {:?} seconds", interal_seconds);
@@ -122,13 +146,13 @@ fn process(config: &Config) -> Result<(), String> {
 fn process_loop(config: &Config,
                 repo: &git::Repository,
                 remote: &mut git::Remote,
+                watch_refs: &WatchReferences,
                 target_ref: &str)
                 -> Result<(), git2::Error> {
 
     let remote_ls = remote.remote_ls()?; // Update remote heads
     let remote_ls: Vec<String> = remote_ls.iter().map(|r| r.flatten_clone()).collect();
-    let watch_refs =
-        compile_watch_refs(&config.repository.watch_refs).map_err(|e| git2::Error::from_str(&format!("{:?}", e)))?;
+
     let watch_heads = resolve_watch_refs(&watch_refs, &remote_ls);
 
     info!("Remote references matching watch references ({}): {:?}",
@@ -159,34 +183,6 @@ fn resolve_target_ref(target_ref: &Option<String>, remote: &mut git::Remote) -> 
             Ok(head)
         }
     }
-}
-
-fn compile_watch_refs(watchrefs_config: &[WatchReferenceConfiguration]) -> Result<WatchReferences, regex::Error> {
-    let exact_list: Vec<String> = watchrefs_config.iter()
-        .map(|watchref| match watchref {
-            &WatchReferenceConfiguration::Exact(ref s) => Some(s.to_string()),
-            _ => None,
-        })
-        .filter(|o| o.is_some())
-        .map(|o| o.unwrap())
-        .collect();
-    info!("{} Exact Watch References", exact_list.len());
-
-    let regex_set: Vec<String> = watchrefs_config.iter()
-        .map(|watchref| match watchref {
-            &WatchReferenceConfiguration::Regex(ref regex) => Some(regex.to_string()),
-            _ => None,
-        })
-        .filter(|o| o.is_some())
-        .map(|o| o.unwrap())
-        .collect();
-    info!("{} Regex Watch References", regex_set.len());
-    let regex_set = RegexSet::new(regex_set)?;
-
-    Ok(WatchReferences {
-        regex_set: regex_set,
-        exact_list: exact_list,
-    })
 }
 
 fn resolve_watch_refs(watchrefs: &WatchReferences, remote_ls: &[String]) -> HashSet<String> {

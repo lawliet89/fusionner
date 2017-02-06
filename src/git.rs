@@ -209,6 +209,7 @@ impl<'repo> Remote<'repo> {
         fetch_options.remote_callbacks(callbacks)
             .prune(git2::FetchPrune::On);
 
+        debug!("Fetching {:?}", refspecs);
         self.remote.fetch(refspecs, Some(&mut fetch_options), None)?;
         self.remote.disconnect();
         Ok(())

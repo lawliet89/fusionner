@@ -132,8 +132,11 @@ fn process(config: &Config, watch_refs: &WatchReferences) -> Result<(), String> 
     let repo = git::Repository::clone_or_open(&config.repository).map_err(|e| format!("{:?}", e))?;
     let remote_name = utils::to_option_str(&config.repository.remote);
     let mut remote = repo.remote(remote_name).map_err(|e| format!("{:?}", e))?;
-    let merger = merger::Merger::new(&repo, utils::to_option_str(&config.repository.notes_namespace));
-    merger.add_note_refspecs(remote_name).map_err(|e| format!("{:?}", e))?;
+    let merger =
+        merger::Merger::new(&repo,
+                            remote_name,
+                            utils::to_option_str(&config.repository.notes_namespace)).map_err(|e| format!("{:?}", e))?;
+    merger.add_note_refspecs().map_err(|e| format!("{:?}", e))?;
 
     let interal_seconds = config.interval.or(Some(DEFAULT_INTERVAL)).unwrap();
     let interval = std::time::Duration::from_secs(interal_seconds);
@@ -225,11 +228,5 @@ fn read_config(path: &str) -> Result<Config, String> {
     let mut config_toml = String::new();
     file.read_to_string(&mut config_toml).map_err(|e| format!("{:?}", e))?;
 
-    let parsed_toml = toml::Parser::new(&config_toml).parse();
-    if let None = parsed_toml {
-        return Err("Error parsing configuration TOML".to_string());
-    }
-
-    let config = toml::Value::Table(parsed_toml.unwrap());
-    rustc_serialize::Decodable::decode(&mut toml::Decoder::new(config)).map_err(|e| format!("{:?}", e))?
+    utils::deserialize_toml(&config_toml)
 }

@@ -144,6 +144,7 @@ fn process(config: &Config, watch_refs: &WatchReferences) -> Result<(), String> 
                             remote_name,
                             utils::to_option_str(&config.repository.notes_namespace)).map_err(|e| format!("{:?}", e))?;
     merger.add_note_refspecs().map_err(|e| format!("{:?}", e))?;
+    merger::MergeReferenceNamer::add_default_refspecs(&remote).map_err(|e| format!("{:?}", e))?;
 
     remote.add_refspecs(&utils::as_str_slice(&config.repository.fetch_refspecs),
                       git2::Direction::Fetch)
@@ -251,7 +252,7 @@ fn process_loop(repo: &git::Repository,
         }
 
         info!("Performing merge");
-        let merged_note = merger.merge(oid, target_oid)?;
+        let merged_note = merger.merge(oid, target_oid, &reference, target_ref)?;
 
         info!("Adding note: {:?}", merged_note);
         merger.add_note(&merged_note, oid)?;

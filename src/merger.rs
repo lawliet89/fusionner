@@ -54,10 +54,10 @@ impl<'repo> Merger<'repo> {
     }
 
     /// Find notes for commits. Make sure you have fetched them first
-    pub fn find_notes(&self, commits: &[git2::Oid]) -> HashMap<git2::Oid, Result<Note, git2::Error>> {
+    pub fn find_notes(&self, oids: &[git2::Oid]) -> HashMap<git2::Oid, Result<Note, git2::Error>> {
         let notes_ref = self.notes_reference_base();
 
-        commits.iter()
+        oids.iter()
             .map(|oid| (oid, self.repository.repository.find_note(Some(&notes_ref), *oid)))
             .map(|(oid, note)| {
                 let note = match note {

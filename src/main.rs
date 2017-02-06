@@ -136,7 +136,7 @@ fn process(config: &Config, watch_refs: &WatchReferences) -> Result<(), String> 
     let repo = git::Repository::clone_or_open(&config.repository).map_err(|e| format!("{:?}", e))?;
     let remote_name = utils::to_option_str(&config.repository.remote);
     let mut remote = repo.remote(remote_name).map_err(|e| format!("{:?}", e))?;
-    let merger =
+    let mut merger =
         merger::Merger::new(&repo,
                             remote_name,
                             utils::to_option_str(&config.repository.notes_namespace)).map_err(|e| format!("{:?}", e))?;
@@ -158,7 +158,7 @@ fn process(config: &Config, watch_refs: &WatchReferences) -> Result<(), String> 
         if let Err(e) = process_loop(&config,
                                      &repo,
                                      &mut remote,
-                                     &merger,
+                                     &mut merger,
                                      watch_refs,
                                      &target_ref) {
             println!("Error: {:?}", e);
@@ -173,7 +173,7 @@ fn process(config: &Config, watch_refs: &WatchReferences) -> Result<(), String> 
 fn process_loop(config: &Config,
                 repo: &git::Repository,
                 remote: &mut git::Remote,
-                merger: &merger::Merger,
+                merger: &mut merger::Merger,
                 watch_refs: &WatchReferences,
                 target_ref: &str)
                 -> Result<(), git2::Error> {
@@ -232,10 +232,13 @@ fn process_loop(config: &Config,
         .collect();
     debug!("{:?}", oids);
 
-    // Fetch notes
-    let commits = oids.values().map(|oid|
-        format!("{}", oid)
-    );
+    info!("Fetching notes for commits");
+    let commits : Vec<String> = oids.values().map(|oid| format!("{}", oid)).collect();
+    merger.fetch_notes(utils::as_str_slice(&commits).as_slice())?;
+
+    info!("Parsing notes for commits");
+    let notes = merger.find_notes(&oids.values().map(|oid| *oid).collect::<Vec<git2::Oid>>());
+    debug!("{:?}", notes);
 
     remote.disconnect();
     Ok(())

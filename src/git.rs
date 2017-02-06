@@ -1,7 +1,9 @@
-use super::git2;
 use std::vec::Vec;
 use std::path::Path;
+use std::collections::HashMap;
 use std::str;
+
+use super::git2;
 use super::RepositoryConfiguration;
 
 pub struct Repository<'repo> {
@@ -148,6 +150,12 @@ impl<'repo> Repository<'repo> {
     pub fn remote_name_or_default(remote: Option<&str>) -> String {
         remote.unwrap_or("origin").to_string()
     }
+
+    // pub fn commits_to_oid(commits: &[&str]) -> HashMap<String, Result<git2::Oid, git2::Error>> {
+    //     commits.iter()
+    //         .map(|commit| (commit.to_string(), git2::Oid::from_str(commit)))
+    //         .collect()
+    // }
 }
 
 impl<'repo> Remote<'repo> {
@@ -213,5 +221,38 @@ impl<'repo> Remote<'repo> {
         self.remote.fetch(refspecs, Some(&mut fetch_options), None)?;
         self.remote.disconnect();
         Ok(())
+    }
+
+    pub fn add_refspec(&self, refspec: &str, direction: git2::Direction) -> Result<(), git2::Error> {
+        let remote_name = self.name().ok_or(git2::Error::from_str("Un-named remote used"))?;
+
+        info!("Checking and adding refspec {}", refspec);
+        if let None = Remote::find_matching_refspec(self.refspecs(), git2::Direction::Fetch, refspec) {
+            info!("No existing fetch refpec found: adding {}", refspec);
+            self.repository.repository.remote_add_fetch(remote_name, &refspec)?;
+        }
+
+        if let None = Remote::find_matching_refspec(self.remote.refspecs(), git2::Direction::Push, refspec) {
+            info!("No existing push refpec found: adding {}", refspec);
+            self.repository.repository.remote_add_push(remote_name, &refspec)?;
+        }
+        Ok(())
+    }
+
+    pub fn add_refspecs(&self, refspecs: &[&str], direction: git2::Direction) -> Result<(), git2::Error> {
+        for refspec in refspecs {
+            self.add_refspec(refspec, direction)?
+        }
+        Ok(())
+    }
+
+    fn find_matching_refspec<'a>(mut refspecs: git2::Refspecs<'a>,
+                                 direction: git2::Direction,
+                                 refspec: &str)
+                                 -> Option<git2::Refspec<'a>> {
+        refspecs.find(|r| {
+            let rs = r.str();
+            enum_equals!(r.direction(), git2::Direction::Fetch) && rs.is_some() && rs.unwrap() == refspec
+        })
     }
 }

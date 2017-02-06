@@ -42,48 +42,34 @@ impl<'repo> Merger<'repo> {
     /// Add refspecs to a remote to fetch/push commit notes, specific for fusionner
     pub fn add_note_refspecs(&self) -> Result<(), git2::Error> {
         let refspec = format!("{0}/*:{0}/*", self.notes_reference_base());
-        let remote_name = self.remote.name().ok_or(git2::Error::from_str("Un-named remote used"))?;
-
-        info!("Adding notes refspecs");
-        if let None = Merger::find_matching_refspec(self.remote.refspecs(), git2::Direction::Fetch, &refspec) {
-            info!("No existing fetch refpecs found: adding {}", refspec);
-            self.repository.repository.remote_add_fetch(remote_name, &refspec)?;
-        }
-
-        if let None = Merger::find_matching_refspec(self.remote.refspecs(), git2::Direction::Push, &refspec) {
-            info!("No existing push refpecs found: adding {}", refspec);
-            self.repository.repository.remote_add_push(remote_name, &refspec)?;
-        }
-        Ok(())
+        self.remote.add_refspec(&refspec, git2::Direction::Fetch)?;
+        self.remote.add_refspec(&refspec, git2::Direction::Push)
     }
 
     pub fn fetch_notes(&mut self, commits: &[&str]) -> Result<(), git2::Error> {
         let refs: Vec<String> = commits.iter().map(|commit| self.note_ref(commit)).collect();
-        let refs_refs: Vec<&str> = refs.iter().map(AsRef::as_ref).collect();
+        let refs_refs: Vec<&str> = utils::as_str_slice(&refs);
 
         self.remote.fetch(&refs_refs)
     }
 
     /// Find notes for commits. Make sure you have fetched them first
-    pub fn find_notes(&self, commits: &[&str]) -> HashMap<String, Result<Note, git2::Error>> {
+    pub fn find_notes(&self, commits: &[git2::Oid]) -> HashMap<git2::Oid, Result<Note, git2::Error>> {
         let notes_ref = self.notes_reference_base();
 
         commits.iter()
-            .map(|commit| (commit, git2::Oid::from_str(commit)))
-            .map(|(commit, oid)| {
-                (commit, oid.and_then(|oid| self.repository.repository.find_note(Some(&notes_ref), oid)))
-            })
-            .map(|(commit, note)| {
+            .map(|oid| (oid, self.repository.repository.find_note(Some(&notes_ref), *oid)))
+            .map(|(oid, note)| {
                 let note = match note {
                     Err(e) => Err(e),
                     Ok(note) => {
                         note.message()
-                            .ok_or(git2::Error::from_str(&"Invalid message in note for commit"))
+                            .ok_or(git2::Error::from_str(&"Invalid message in note for oid"))
                             .and_then(|note| utils::deserialize_toml(&note).map_err(|e| git2::Error::from_str(&e)))
                     }
                 };
 
-                (commit.to_string(), note)
+                (*oid, note)
             })
             .collect()
     }
@@ -94,15 +80,5 @@ impl<'repo> Merger<'repo> {
 
     fn notes_reference_base(&self) -> String {
         format!("refs/notes/{}", self.namespace)
-    }
-
-    fn find_matching_refspec<'a>(mut refspecs: git2::Refspecs<'a>,
-                                 direction: git2::Direction,
-                                 refspec: &str)
-                                 -> Option<git2::Refspec<'a>> {
-        refspecs.find(|r| {
-            let rs = r.str();
-            enum_equals!(r.direction(), git2::Direction::Fetch) && rs.is_some() && rs.unwrap() == refspec
-        })
     }
 }

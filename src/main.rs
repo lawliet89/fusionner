@@ -16,7 +16,7 @@ use std::env;
 use std::fs::File;
 use std::io::Read;
 use std::marker::PhantomData;
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 use std::vec::Vec;
 
 use docopt::Docopt;
@@ -55,13 +55,17 @@ pub struct Config<'config> {
 #[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
 pub struct RepositoryConfiguration<'config> {
     uri: String,
+    checkout_path: String,
     remote: Option<String>,
     notes_namespace: Option<String>,
+    fetch_refspecs: Vec<String>,
+    push_refspecs: Vec<String>,
+    // Authentication Options
     username: Option<String>,
     password: Option<String>,
     key: Option<String>,
     key_passphrase: Option<String>,
-    checkout_path: String,
+    // Matching settings
     merge_ref: Option<String>,
     target_ref: Option<String>, // TODO: Support specifying branch name instead of references
     _marker: PhantomData<&'config String>,
@@ -138,6 +142,13 @@ fn process(config: &Config, watch_refs: &WatchReferences) -> Result<(), String> 
                             utils::to_option_str(&config.repository.notes_namespace)).map_err(|e| format!("{:?}", e))?;
     merger.add_note_refspecs().map_err(|e| format!("{:?}", e))?;
 
+    remote.add_refspecs(&utils::as_str_slice(&config.repository.fetch_refspecs),
+                      git2::Direction::Fetch)
+        .map_err(|e| format!("{:?}", e))?;
+    remote.add_refspecs(&utils::as_str_slice(&config.repository.push_refspecs),
+                      git2::Direction::Push)
+        .map_err(|e| format!("{:?}", e))?;
+
     let interal_seconds = config.interval.or(Some(DEFAULT_INTERVAL)).unwrap();
     let interval = std::time::Duration::from_secs(interal_seconds);
 
@@ -181,6 +192,50 @@ fn process_loop(config: &Config,
 
     info!("Fetching matched remotes");
     remote.fetch(&watch_heads.iter().map(|s| s.as_str()).collect::<Vec<&str>>())?;
+
+    info!("Finding references");
+    let references: HashMap<String, git2::Reference> = watch_heads.iter()
+        .map(|reference| {
+            let resolved_reference = repo.repository
+                .find_reference(reference)
+                .and_then(|reference| reference.resolve());
+            (reference.to_string(), resolved_reference)
+        })
+        .filter(|&(ref reference, ref resolved_reference)| {
+            match resolved_reference {
+                &Err(ref e) => {
+                    warn!("Invalid reference {}: {:?}", reference, e);
+                    false
+                },
+                &Ok(_) => true
+            }
+        })
+        .map(|(reference, resolved_reference)| (reference, resolved_reference.unwrap()))
+        .collect();
+
+    info!("Resolving OID for references");
+    let oids: HashMap<String, git2::Oid> = references.iter()
+        .map(|(reference, resolved_reference)| {
+            let oid = resolved_reference.target().ok_or(git2::Error::from_str("Unknown reference"));
+            (reference.to_string(), oid)
+        })
+        .filter(|&(ref reference, ref oid)| {
+            match oid {
+                &Err(ref e) => {
+                    warn!("Unable to find OID for reference {}: {:?}", reference, e);
+                    false
+                },
+                &Ok(_) => true
+            }
+        })
+        .map(|(reference, oid)| (reference, oid.unwrap()))
+        .collect();
+    debug!("{:?}", oids);
+
+    // Fetch notes
+    let commits = oids.values().map(|oid|
+        format!("{}", oid)
+    );
 
     remote.disconnect();
     Ok(())

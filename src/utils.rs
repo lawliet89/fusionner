@@ -1,3 +1,5 @@
+use std::vec::Vec;
+
 use rustc_serialize::Decodable;
 use super::toml;
 
@@ -15,6 +17,10 @@ pub fn deserialize_toml<T>(toml: &str) -> Result<T, String>
 
     let table = toml::Value::Table(parsed_toml.unwrap());
     Decodable::decode(&mut toml::Decoder::new(table)).map_err(|e| format!("{:?}", e))?
+}
+
+pub fn as_str_slice<'a>(input: &'a [String]) -> Vec<&'a str> {
+    input.iter().map(AsRef::as_ref).collect()
 }
 
 macro_rules! enum_equals(

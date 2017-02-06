@@ -56,6 +56,7 @@ pub struct Config<'config> {
 pub struct RepositoryConfiguration<'config> {
     uri: String,
     remote: Option<String>,
+    notes_namespace: Option<String>,
     username: Option<String>,
     password: Option<String>,
     key: Option<String>,
@@ -131,7 +132,7 @@ fn process(config: &Config, watch_refs: &WatchReferences) -> Result<(), String> 
     let repo = git::Repository::clone_or_open(&config.repository).map_err(|e| format!("{:?}", e))?;
     let remote_name = utils::to_option_str(&config.repository.remote);
     let mut remote = repo.remote(remote_name).map_err(|e| format!("{:?}", e))?;
-    let merger = merger::Merger::new(&repo);
+    let merger = merger::Merger::new(&repo, utils::to_option_str(&config.repository.notes_namespace));
     merger.add_note_refspecs(remote_name).map_err(|e| format!("{:?}", e))?;
 
     let interal_seconds = config.interval.or(Some(DEFAULT_INTERVAL)).unwrap();

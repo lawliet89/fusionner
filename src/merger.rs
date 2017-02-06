@@ -53,25 +53,13 @@ impl<'repo> Merger<'repo> {
         self.remote.fetch(&refs_refs)
     }
 
-    /// Find notes for commits. Make sure you have fetched them first
-    pub fn find_notes(&self, oids: &[git2::Oid]) -> HashMap<git2::Oid, Result<Note, git2::Error>> {
+    /// Find note for commit. Make sure you have fetched them first
+    pub fn find_note(&self, oid: git2::Oid) ->  Result<Note, git2::Error> {
         let notes_ref = self.notes_reference_base();
-
-        oids.iter()
-            .map(|oid| (oid, self.repository.repository.find_note(Some(&notes_ref), *oid)))
-            .map(|(oid, note)| {
-                let note = match note {
-                    Err(e) => Err(e),
-                    Ok(note) => {
-                        note.message()
-                            .ok_or(git2::Error::from_str(&"Invalid message in note for oid"))
-                            .and_then(|note| utils::deserialize_toml(&note).map_err(|e| git2::Error::from_str(&e)))
-                    }
-                };
-
-                (*oid, note)
-            })
-            .collect()
+        let note = self.repository.repository.find_note(Some(&notes_ref), oid)?;
+        note.message()
+            .ok_or(git2::Error::from_str(&"Invalid message in note for oid"))
+            .and_then(|note| utils::deserialize_toml(&note).map_err(|e| git2::Error::from_str(&e)))
     }
 
     fn note_ref(&self, commit: &str) -> String {

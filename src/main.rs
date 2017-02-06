@@ -237,7 +237,9 @@ fn process_loop(config: &Config,
     merger.fetch_notes(utils::as_str_slice(&commits).as_slice())?;
 
     info!("Parsing notes for commits");
-    let notes = merger.find_notes(&oids.values().map(|oid| *oid).collect::<Vec<git2::Oid>>());
+    let notes: HashMap<String, Result<merger::Note, git2::Error>> = oids.iter().map(|(reference, oid)| {
+        (reference.to_string(), merger.find_note(*oid))
+    }).collect();
     debug!("{:?}", notes);
 
     remote.disconnect();

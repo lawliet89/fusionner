@@ -1,6 +1,5 @@
 use std::vec::Vec;
 use std::path::Path;
-use std::collections::HashMap;
 use std::str;
 
 use super::git2;
@@ -185,7 +184,7 @@ impl<'repo> Remote<'repo> {
     }
 
     pub fn remote_ls(&mut self) -> Result<Vec<RemoteHead>, git2::Error> {
-        let mut connection = self.connect()?;
+        let connection = self.connect()?;
         info!("Retrieving remote references `git ls-remote`");
         let heads = connection.list()?;
         Ok(heads.iter()
@@ -203,7 +202,7 @@ impl<'repo> Remote<'repo> {
 
     // Get the remote reference of renote HEAD (i.e. default branch)
     pub fn head(&mut self) -> Result<Option<String>, git2::Error> {
-        let mut connection = self.connect()?;
+        let connection = self.connect()?;
         info!("Retrieving remote references `git ls-remote`");
         let heads = connection.list()?;
         Ok(Remote::resolve_head(heads))
@@ -233,15 +232,19 @@ impl<'repo> Remote<'repo> {
         let remote_name = self.name().ok_or(git2::Error::from_str("Un-named remote used"))?;
 
         info!("Checking and adding refspec {}", refspec);
-        if let None = Remote::find_matching_refspec(self.refspecs(), git2::Direction::Fetch, refspec) {
-            info!("No existing fetch refpec found: adding {}", refspec);
-            self.repository.repository.remote_add_fetch(remote_name, &refspec)?;
+        if let None = Remote::find_matching_refspec(self.refspecs(), direction, refspec) {
+            match direction {
+                git2::Direction::Fetch => {
+                    info!("No existing fetch refpec found: adding {}", refspec);
+                    self.repository.repository.remote_add_fetch(remote_name, &refspec)?;
+                }
+                git2::Direction::Push => {
+                    info!("No existing push refpec found: adding {}", refspec);
+                    self.repository.repository.remote_add_push(remote_name, &refspec)?;
+                }
+            }
         }
 
-        if let None = Remote::find_matching_refspec(self.remote.refspecs(), git2::Direction::Push, refspec) {
-            info!("No existing push refpec found: adding {}", refspec);
-            self.repository.repository.remote_add_push(remote_name, &refspec)?;
-        }
         Ok(())
     }
 
@@ -258,7 +261,17 @@ impl<'repo> Remote<'repo> {
                                  -> Option<git2::Refspec<'a>> {
         refspecs.find(|r| {
             let rs = r.str();
-            enum_equals!(r.direction(), git2::Direction::Fetch) && rs.is_some() && rs.unwrap() == refspec
+            Remote::direction_eq(&r.direction(), &direction) && rs.is_some() && rs.unwrap() == refspec
         })
+    }
+
+    fn direction_eq(left: &git2::Direction, right: &git2::Direction) -> bool {
+        use git2::Direction::*;
+
+        match (left, right) {
+            (&Fetch, &Fetch) => true,
+            (&Push, &Push) => true,
+            _ => false,
+        }
     }
 }

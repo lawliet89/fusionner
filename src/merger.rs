@@ -1,10 +1,7 @@
 use std::vec::Vec;
-use std::collections::HashMap;
 
 use super::git2;
-use super::RepositoryConfiguration;
 use super::git::{Repository, Remote};
-#[macro_use]
 use super::utils;
 
 static DEFAULT_NOTES_NAMESPACE: &'static str = "fusionner";
@@ -76,7 +73,7 @@ impl<'repo> Merger<'repo> {
         let note = self.find_note(oid);
         debug!("Note search result: {:?}", note);
         match note {
-            Err(e) => (true, None),
+            Err(_) => (true, None),
             Ok(note) => {
                 let oid = git2::Oid::from_str(&note.target_parent_oid);
                 let result = match oid {

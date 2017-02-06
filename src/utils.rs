@@ -46,12 +46,3 @@ pub fn git_index_entry_is_conflict(entry: &git2::IndexEntry) -> bool {
 pub fn index_in_conflict(entries: &mut git2::IndexEntries) -> bool {
     entries.any(|ref entry| git_index_entry_is_conflict(entry))
 }
-
-macro_rules! enum_equals(
-    ($enum_a:expr, $enum_b:pat) => (
-        match $enum_a {
-            $enum_b => true,
-            _ => false
-        }
-    )
-);

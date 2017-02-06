@@ -8,7 +8,6 @@ extern crate regex;
 extern crate rustc_serialize;
 extern crate toml;
 
-#[macro_use]
 mod utils;
 mod merger;
 mod git;
@@ -21,7 +20,7 @@ use std::collections::{HashSet, HashMap};
 use std::vec::Vec;
 
 use docopt::Docopt;
-use regex::{Regex, RegexSet};
+use regex::RegexSet;
 
 const USAGE: &'static str = "
 fusionner
@@ -159,12 +158,7 @@ fn process(config: &Config, watch_refs: &WatchReferences) -> Result<(), String> 
     let target_ref = resolve_target_ref(&config.repository.target_ref, &mut remote).map_err(|e| format!("{:?}", e))?;
 
     loop {
-        if let Err(e) = process_loop(&config,
-                                     &repo,
-                                     &mut remote,
-                                     &mut merger,
-                                     watch_refs,
-                                     &target_ref) {
+        if let Err(e) = process_loop(&repo, &mut remote, &mut merger, watch_refs, &target_ref) {
             println!("Error: {:?}", e);
         }
         info!("Sleeping for {:?} seconds", interal_seconds);
@@ -174,8 +168,7 @@ fn process(config: &Config, watch_refs: &WatchReferences) -> Result<(), String> 
     Ok(())
 }
 
-fn process_loop(config: &Config,
-                repo: &git::Repository,
+fn process_loop(repo: &git::Repository,
                 remote: &mut git::Remote,
                 merger: &mut merger::Merger,
                 watch_refs: &WatchReferences,
@@ -251,6 +244,7 @@ fn process_loop(config: &Config,
               oid,
               target_oid,
               should_merge);
+        debug!("Note found: {:?}", note);
         if !should_merge {
             info!("Merge commit is up to date");
             continue;

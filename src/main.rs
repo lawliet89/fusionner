@@ -257,6 +257,8 @@ fn process_loop(repo: &git::Repository,
         info!("Adding note: {:?}", merged_note);
         merger.add_note(&merged_note, oid)?;
     }
+    info!("Pushing to remote");
+    merger.push()?;
 
     remote.disconnect();
     Ok(())

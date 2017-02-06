@@ -142,6 +142,10 @@ impl<'repo> Merger<'repo> {
                                         true)
     }
 
+    pub fn push(&mut self) -> Result<(), git2::Error> {
+        self.remote.push(&[])
+    }
+
     fn merge_commit_message(base_oid: git2::Oid, target_oid: git2::Oid) -> String {
         format!("Merge {} into {}", base_oid, target_oid)
     }
@@ -175,6 +179,10 @@ impl MergeReferenceNamer {
                 format!("{}/{}", DEFAULT_NERGE_REFERENCE_BASE, reference.replace("refs/", ""))
             }
         }
+    }
+
+    pub fn refspec(&self) -> String {
+        DEFAULT_NERGE_REFERENCE_BASE.to_string()
     }
 
     pub fn add_default_refspecs(remote: &Remote) -> Result<(), git2::Error> {

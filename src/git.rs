@@ -228,6 +228,14 @@ impl<'repo> Remote<'repo> {
         Ok(())
     }
 
+    pub fn push(&mut self, refspecs: &[&str]) -> Result<(), git2::Error> {
+        let mut push_options = git2::PushOptions::new();
+        let callbacks = Repository::remote_callbacks(self.repository.details);
+        push_options.remote_callbacks(callbacks);
+
+        self.remote.push(refspecs, Some(&mut push_options))
+    }
+
     pub fn add_refspec(&self, refspec: &str, direction: git2::Direction) -> Result<(), git2::Error> {
         let remote_name = self.name().ok_or(git2::Error::from_str("Un-named remote used"))?;
 

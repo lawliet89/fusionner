@@ -151,11 +151,17 @@ impl<'repo> Repository<'repo> {
         remote.unwrap_or("origin").to_string()
     }
 
-    // pub fn commits_to_oid(commits: &[&str]) -> HashMap<String, Result<git2::Oid, git2::Error>> {
-    //     commits.iter()
-    //         .map(|commit| (commit.to_string(), git2::Oid::from_str(commit)))
-    //         .collect()
-    // }
+    pub fn signature(&self) -> Result<git2::Signature, git2::Error> {
+        if self.details.signature_name.is_some() && self.details.signature_email.is_some() {
+            return git2::Signature::now(self.details.signature_name.as_ref().unwrap(),
+                                        self.details.signature_email.as_ref().unwrap());
+        }
+
+        match self.repository.signature() {
+            Ok(signature) => Ok(signature),
+            Err(_) => git2::Signature::now("fusionner", "fusionner@github.com"),
+        }
+    }
 }
 
 impl<'repo> Remote<'repo> {

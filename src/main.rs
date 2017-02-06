@@ -1,6 +1,7 @@
 extern crate docopt;
 extern crate env_logger;
 extern crate git2;
+extern crate libgit2_sys as git2_raw;
 #[macro_use]
 extern crate log;
 extern crate regex;
@@ -69,6 +70,9 @@ pub struct RepositoryConfiguration<'config> {
     merge_ref: Option<String>,
     target_ref: Option<String>, // TODO: Support specifying branch name instead of references
     _marker: PhantomData<&'config String>,
+    // Signature settings
+    signature_name: Option<String>,
+    signature_email: Option<String>,
 }
 
 /// "Compiled" watch reference
@@ -190,10 +194,12 @@ fn process_loop(config: &Config,
           watch_heads.len());
     debug!("{:?}", watch_heads);
 
-    info!("Fetching matched remotes");
-    remote.fetch(&watch_heads.iter().map(|s| s.as_str()).collect::<Vec<&str>>())?;
+    info!("Fetching matched remotes and target reference");
+    let mut fetch_refs = watch_heads.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
+    fetch_refs.push(target_ref);
+    remote.fetch(&fetch_refs)?;
 
-    info!("Finding references");
+    info!("Resolving references");
     let references: HashMap<String, git2::Reference> = watch_heads.iter()
         .map(|reference| {
             let resolved_reference = repo.repository
@@ -201,14 +207,12 @@ fn process_loop(config: &Config,
                 .and_then(|reference| reference.resolve());
             (reference.to_string(), resolved_reference)
         })
-        .filter(|&(ref reference, ref resolved_reference)| {
-            match resolved_reference {
-                &Err(ref e) => {
-                    warn!("Invalid reference {}: {:?}", reference, e);
-                    false
-                },
-                &Ok(_) => true
+        .filter(|&(ref reference, ref resolved_reference)| match resolved_reference {
+            &Err(ref e) => {
+                warn!("Invalid reference {}: {:?}", reference, e);
+                false
             }
+            &Ok(_) => true,
         })
         .map(|(reference, resolved_reference)| (reference, resolved_reference.unwrap()))
         .collect();
@@ -219,28 +223,45 @@ fn process_loop(config: &Config,
             let oid = resolved_reference.target().ok_or(git2::Error::from_str("Unknown reference"));
             (reference.to_string(), oid)
         })
-        .filter(|&(ref reference, ref oid)| {
-            match oid {
-                &Err(ref e) => {
-                    warn!("Unable to find OID for reference {}: {:?}", reference, e);
-                    false
-                },
-                &Ok(_) => true
+        .filter(|&(ref reference, ref oid)| match oid {
+            &Err(ref e) => {
+                warn!("Unable to find OID for reference {}: {:?}", reference, e);
+                false
             }
+            &Ok(_) => true,
         })
         .map(|(reference, oid)| (reference, oid.unwrap()))
         .collect();
     debug!("{:?}", oids);
 
+    info!("Resolving reference and OID for target reference");
+    let resolved_target = repo.repository
+        .find_reference(target_ref)
+        .and_then(|reference| reference.resolve())?;
+    let target_oid = resolved_target.target().ok_or(git2::Error::from_str("Unable to find OID for target reference"))?;
+
     info!("Fetching notes for commits");
-    let commits : Vec<String> = oids.values().map(|oid| format!("{}", oid)).collect();
+    let commits: Vec<String> = oids.values().map(|oid| format!("{}", oid)).collect();
     merger.fetch_notes(utils::as_str_slice(&commits).as_slice())?;
 
-    info!("Parsing notes for commits");
-    let notes: HashMap<String, Result<merger::Note, git2::Error>> = oids.iter().map(|(reference, oid)| {
-        (reference.to_string(), merger.find_note(*oid))
-    }).collect();
-    debug!("{:?}", notes);
+    for (reference, oid) in oids {
+        let (should_merge, note) = merger.should_merge(oid, target_oid);
+        info!("Merging {} ({} into {})?: {}",
+              reference,
+              oid,
+              target_oid,
+              should_merge);
+        if !should_merge {
+            info!("Merge commit is up to date");
+            continue;
+        }
+
+        info!("Performing merge");
+        let merged_note = merger.merge(oid, target_oid)?;
+
+        info!("Adding note: {:?}", merged_note);
+        merger.add_note(&merged_note, oid)?;
+    }
 
     remote.disconnect();
     Ok(())

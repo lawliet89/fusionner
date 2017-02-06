@@ -8,6 +8,8 @@ use super::git::{Repository, Remote};
 use super::utils;
 
 static DEFAULT_NOTES_NAMESPACE: &'static str = "fusionner";
+const NOTE_VERSION: u8 = 1;
+static NOTE_ID: &'static str = "fusionner <https://github.com/lawliet89/fusionner>";
 
 pub struct Merger<'repo> {
     repository: &'repo Repository<'repo>,
@@ -18,10 +20,16 @@ pub struct Merger<'repo> {
 /// A `Note` is stored for each commit on the topic branches' current head
 #[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
 pub struct Note {
+    /// For human readers to know where this is from
+    pub _note_origin: String,
+    /// Version of the note
+    pub _version: u8,
     /// The commit hash for this topic branch's head
-    pub merge_commit: String,
-    /// The parent commit on the default branch for the merge commit
-    pub default_parent: String,
+    pub merge_oid: String,
+    /// The parent commit on the target branch for the merge commit
+    pub target_parent_oid: String,
+    /// Merge Parents, other than the target parent
+    pub parents_oid: Vec<String>,
     /// The reference for the merge commit, if any
     pub merge_reference: Option<String>,
 }
@@ -54,12 +62,74 @@ impl<'repo> Merger<'repo> {
     }
 
     /// Find note for commit. Make sure you have fetched them first
-    pub fn find_note(&self, oid: git2::Oid) ->  Result<Note, git2::Error> {
+    pub fn find_note(&self, oid: git2::Oid) -> Result<Note, git2::Error> {
         let notes_ref = self.notes_reference_base();
         let note = self.repository.repository.find_note(Some(&notes_ref), oid)?;
         note.message()
             .ok_or(git2::Error::from_str(&"Invalid message in note for oid"))
             .and_then(|note| utils::deserialize_toml(&note).map_err(|e| git2::Error::from_str(&e)))
+    }
+
+    /// Determine if a merge should be made
+    pub fn should_merge(&self, oid: git2::Oid, target_oid: git2::Oid) -> (bool, Option<Note>) {
+        info!("Deciding if we should merge {} into {}", oid, target_oid);
+        let note = self.find_note(oid);
+        debug!("Note search result: {:?}", note);
+        match note {
+            Err(e) => (true, None),
+            Ok(note) => {
+                let oid = git2::Oid::from_str(&note.target_parent_oid);
+                let result = match oid {
+                    Err(_) => true,
+                    Ok(oid) => oid != target_oid,
+                };
+                (result, Some(note))
+            }
+        }
+    }
+
+    /// Performs a merge and return a note intended for `oid`
+    pub fn merge(&self, oid: git2::Oid, target_oid: git2::Oid) -> Result<Note, git2::Error> {
+        let our_commit = self.repository.repository.find_commit(target_oid)?;
+        let their_commit = self.repository.repository.find_commit(oid)?;
+        let mut merged_index = self.repository.repository.merge_commits(&our_commit, &their_commit, None)?;
+        if utils::index_in_conflict(&mut merged_index.iter()) {
+            return Err(git2::Error::from_str("Index is in conflict after merge -- skipping"));
+        }
+
+        let tree_oid = merged_index.write_tree_to(&self.repository.repository)?;
+        let tree = self.repository.repository.find_tree(tree_oid)?;
+
+        // Commit
+        // TODO: Add some reference
+        let signature = self.repository.signature()?;
+        let commit_message = Merger::merge_commit_message(oid, target_oid);
+        let merge_oid = self.repository
+            .repository
+            .commit(None,
+                    &signature,
+                    &signature,
+                    &commit_message,
+                    &tree,
+                    &[&our_commit, &their_commit])?;
+
+        Ok(Note::new(merge_oid, target_oid, &[oid]))
+    }
+
+    pub fn add_note(&self, note: &Note, oid: git2::Oid) -> Result<git2::Oid, git2::Error> {
+        let signature = self.repository.signature()?;
+        let serialized_note = utils::serialize_toml(&note).map_err(|e| git2::Error::from_str(&e))?;
+
+        self.repository.repository.note(&signature,
+                                        &signature,
+                                        Some(&self.notes_reference_base()),
+                                        oid,
+                                        &serialized_note,
+                                        true)
+    }
+
+    fn merge_commit_message(base_oid: git2::Oid, target_oid: git2::Oid) -> String {
+        format!("Merge {} into {}", base_oid, target_oid)
     }
 
     fn note_ref(&self, commit: &str) -> String {
@@ -68,5 +138,18 @@ impl<'repo> Merger<'repo> {
 
     fn notes_reference_base(&self) -> String {
         format!("refs/notes/{}", self.namespace)
+    }
+}
+
+impl Note {
+    fn new(merge_oid: git2::Oid, target_parent_oid: git2::Oid, parents: &[git2::Oid]) -> Note {
+        Note {
+            _note_origin: NOTE_ID.to_string(),
+            _version: NOTE_VERSION,
+            merge_oid: format!("{}", merge_oid),
+            target_parent_oid: format!("{}", target_parent_oid),
+            parents_oid: parents.iter().map(|oid| format!("{}", oid)).collect(),
+            merge_reference: None, // TODO
+        }
     }
 }

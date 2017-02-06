@@ -7,6 +7,9 @@ extern crate regex;
 extern crate rustc_serialize;
 extern crate toml;
 
+#[macro_use]
+mod utils;
+mod merger;
 mod git;
 
 use std::env;
@@ -52,6 +55,7 @@ pub struct Config<'config> {
 #[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
 pub struct RepositoryConfiguration<'config> {
     uri: String,
+    remote: Option<String>,
     username: Option<String>,
     password: Option<String>,
     key: Option<String>,
@@ -125,15 +129,23 @@ fn main() {
 
 fn process(config: &Config, watch_refs: &WatchReferences) -> Result<(), String> {
     let repo = git::Repository::clone_or_open(&config.repository).map_err(|e| format!("{:?}", e))?;
-    let mut origin = repo.origin_remote().map_err(|e| format!("{:?}", e))?;
+    let remote_name = utils::to_option_str(&config.repository.remote);
+    let mut remote = repo.remote(remote_name).map_err(|e| format!("{:?}", e))?;
+    let merger = merger::Merger::new(&repo);
+    merger.add_note_refspecs(remote_name).map_err(|e| format!("{:?}", e))?;
 
     let interal_seconds = config.interval.or(Some(DEFAULT_INTERVAL)).unwrap();
     let interval = std::time::Duration::from_secs(interal_seconds);
 
-    let target_ref = resolve_target_ref(&config.repository.target_ref, &mut origin).map_err(|e| format!("{:?}", e))?;
+    let target_ref = resolve_target_ref(&config.repository.target_ref, &mut remote).map_err(|e| format!("{:?}", e))?;
 
     loop {
-        if let Err(e) = process_loop(&config, &repo, &mut origin, watch_refs, &target_ref) {
+        if let Err(e) = process_loop(&config,
+                                     &repo,
+                                     &mut remote,
+                                     &merger,
+                                     watch_refs,
+                                     &target_ref) {
             println!("Error: {:?}", e);
         }
         info!("Sleeping for {:?} seconds", interal_seconds);
@@ -146,6 +158,7 @@ fn process(config: &Config, watch_refs: &WatchReferences) -> Result<(), String> 
 fn process_loop(config: &Config,
                 repo: &git::Repository,
                 remote: &mut git::Remote,
+                merger: &merger::Merger,
                 watch_refs: &WatchReferences,
                 target_ref: &str)
                 -> Result<(), git2::Error> {

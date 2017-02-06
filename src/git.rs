@@ -138,12 +138,15 @@ impl<'repo> Repository<'repo> {
         remote_callbacks
     }
 
-    // Get default (origin) remote
-    pub fn origin_remote(&self) -> Result<Remote, git2::Error> {
+    pub fn remote(&self, remote: Option<&str>) -> Result<Remote, git2::Error> {
         Ok(Remote {
-            remote: self.repository.find_remote("origin")?,
+            remote: self.repository.find_remote(&Repository::remote_name_or_default(remote))?,
             repository: self,
         })
+    }
+
+    pub fn remote_name_or_default(remote: Option<&str>) -> String {
+        remote.unwrap_or("origin").to_string()
     }
 }
 
@@ -157,6 +160,14 @@ impl<'repo> Remote<'repo> {
 
     pub fn disconnect(&mut self) {
         self.remote.disconnect();
+    }
+
+    pub fn name(&self) -> Option<&str> {
+        self.remote.name()
+    }
+
+    pub fn refspecs(&self) -> git2::Refspecs {
+        self.remote.refspecs()
     }
 
     pub fn remote_ls(&mut self) -> Result<Vec<RemoteHead>, git2::Error> {

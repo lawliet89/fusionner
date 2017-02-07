@@ -1,4 +1,3 @@
-extern crate env_logger;
 extern crate git2;
 extern crate libgit2_sys as git2_raw;
 #[macro_use]

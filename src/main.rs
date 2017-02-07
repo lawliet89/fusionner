@@ -7,12 +7,12 @@ extern crate libgit2_sys as git2_raw;
 extern crate log;
 extern crate regex;
 extern crate rustc_serialize;
+extern crate time;
 extern crate toml;
 
 #[macro_use]
 mod utils;
 
-use std::env;
 use std::collections::HashMap;
 use std::vec::Vec;
 
@@ -32,13 +32,15 @@ Use <watch-ref> to define the Git references to watch for commits.
 Use --watch-regex=<regex> instead to specify references that matches the Regex
 
 Options:
-  -h --help    Show this screen.
+  -h --help                 Show this screen.
+  --log-level=<log-level>   The default log level is `info`. Can be set to `trace`, `debug`, `info`, `warn`, or `error`
 ";
 
 #[derive(RustcDecodable, Debug)]
 struct Args {
     arg_configuration_file: String,
     flag_watch_regex: Vec<String>,
+    flag_log_level: Option<String>,
     arg_watch_ref: Vec<String>,
 }
 
@@ -69,8 +71,10 @@ fn main() {
             .and_then(|d| d.decode())
             .unwrap_or_else(|e| e.exit());
 
-        let logger_config = configure_logger();
-        logger_config.into_logger();
+        let logger_config = configure_logger(&args.flag_log_level);
+        if let Err(e) = fern::init_global_logger(logger_config, log::LogLevelFilter::Debug) {
+            panic!("Failed to initialize global logger: {}", e);
+        }
 
         debug!("Arguments parsed: {:?}", args);
 
@@ -209,16 +213,28 @@ fn process_loop(remote: &mut git::Remote,
     Ok(())
 }
 
-fn configure_logger() -> fern::DispatchConfig {
+// TODO: Support logging to file/stderr/etc.
+fn configure_logger<'a>(log_level: &Option<String>) -> fern::DispatchConfig<'a> {
+    let log_level = resolve_log_level(log_level);
+
     fern::DispatchConfig {
         format: Box::new(|msg: &str, level: &log::LogLevel, _location: &log::LogLocation| {
             format!("[{}][{}] {}",
-                    time::now().strftime("%Y-%m-%d][%H:%M:%S").unwrap(),
-                    level,
-                    msg)
+                    time::now().strftime("%FT%T%z").unwrap(), level, msg)
         }),
         output: vec![fern::OutputConfig::stdout()],
-        level: log::LogLevelFilter::Info,
+        level: log_level,
+    }
+}
+
+fn resolve_log_level(log_level: &Option<String>) -> log::LogLevelFilter {
+    match to_option_str(log_level) {
+        Some("trace") => log::LogLevelFilter::Trace,
+        Some("debug") => log::LogLevelFilter::Debug,
+        Some("warn") => log::LogLevelFilter::Warn,
+        Some("error") => log::LogLevelFilter::Error,
+        None | Some("info") => log::LogLevelFilter::Info,
+        Some(level @ _) => panic!("Unknown log level {}", level)
     }
 }
 

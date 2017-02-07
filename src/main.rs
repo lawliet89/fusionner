@@ -84,6 +84,7 @@ fn main() {
 }
 
 fn process(config: &Config, watch_refs: &WatchReferences) -> Result<(), String> {
+    // Create our structs
     let repo = git::Repository::clone_or_open(&config.repository).map_err(|e| format!("{:?}", e))?;
     let remote_name = to_option_str(&config.repository.remote);
     let mut remote = repo.remote(remote_name).map_err(|e| format!("{:?}", e))?;
@@ -91,6 +92,8 @@ fn process(config: &Config, watch_refs: &WatchReferences) -> Result<(), String> 
         merger::Merger::new(&repo,
                             remote_name,
                             to_option_str(&config.repository.notes_namespace)).map_err(|e| format!("{:?}", e))?;
+
+    // Add the necessary refspecs
     merger.add_note_refspecs().map_err(|e| format!("{:?}", e))?;
     merger::MergeReferenceNamer::add_default_refspecs(&remote).map_err(|e| format!("{:?}", e))?;
 
@@ -101,13 +104,14 @@ fn process(config: &Config, watch_refs: &WatchReferences) -> Result<(), String> 
                       git2::Direction::Push)
         .map_err(|e| format!("{:?}", e))?;
 
+    let target_ref = config.repository.resolve_target_ref(&mut remote).map_err(|e| format!("{:?}", e))?;
+
+    // Setup intervals
     let interal_seconds = config.interval.or(Some(DEFAULT_INTERVAL)).unwrap();
     let interval = std::time::Duration::from_secs(interal_seconds);
 
-    let target_ref = config.repository.resolve_target_ref(&mut remote).map_err(|e| format!("{:?}", e))?;
-
     loop {
-        if let Err(e) = process_loop(&repo, &mut remote, &mut merger, watch_refs, &target_ref) {
+        if let Err(e) = process_loop(&mut remote, &mut merger, watch_refs, &target_ref) {
             println!("Error: {:?}", e);
         }
         info!("Sleeping for {:?} seconds", interal_seconds);
@@ -118,8 +122,7 @@ fn process(config: &Config, watch_refs: &WatchReferences) -> Result<(), String> 
 }
 
 // TODO: Early return if nothing is found
-fn process_loop(repo: &git::Repository,
-                remote: &mut git::Remote,
+fn process_loop(remote: &mut git::Remote,
                 merger: &mut merger::Merger,
                 watch_refs: &WatchReferences,
                 target_ref: &str)
@@ -142,47 +145,23 @@ fn process_loop(repo: &git::Repository,
     fetch_refs.push(target_ref);
     remote.fetch(&fetch_refs)?;
 
-    // TODO: Resolve via remote heads
-    info!("Resolving references");
-    let references: HashMap<String, git2::Reference> = watch_heads.iter()
-        .map(|reference| {
-            let resolved_reference = repo.repository
-                .find_reference(reference)
-                .and_then(|reference| reference.resolve());
-            (reference.to_string(), resolved_reference)
-        })
-        .filter(|&(ref reference, ref resolved_reference)| match resolved_reference {
-            &Err(ref e) => {
-                warn!("Invalid reference {}: {:?}", reference, e);
+    info!("Resolving references and oid");
+    let oids: HashMap<String, git2::Oid> = resolve_oids(fetch_refs.as_slice(), remote_ls.as_slice())
+        .iter()
+        .filter(|&(reference, oid)| match oid {
+            &None => {
+                warn!("No OID found for reference {}", reference);
                 false
             }
-            &Ok(_) => true,
+            &Some(_) => true,
         })
-        .map(|(reference, resolved_reference)| (reference, resolved_reference.unwrap()))
-        .collect();
-
-    info!("Resolving OID for references");
-    let oids: HashMap<String, git2::Oid> = references.iter()
-        .map(|(reference, resolved_reference)| {
-            let oid = resolved_reference.target().ok_or(git2::Error::from_str("Unknown reference"));
-            (reference.to_string(), oid)
-        })
-        .filter(|&(ref reference, ref oid)| match oid {
-            &Err(ref e) => {
-                warn!("Unable to find OID for reference {}: {:?}", reference, e);
-                false
-            }
-            &Ok(_) => true,
-        })
-        .map(|(reference, oid)| (reference, oid.unwrap()))
+        .map(|(reference, oid)| (reference.to_string(), oid.unwrap()))
         .collect();
     debug!("{:?}", oids);
 
     info!("Resolving reference and OID for target reference");
-    let resolved_target = repo.repository
-        .find_reference(target_ref)
-        .and_then(|reference| reference.resolve())?;
-    let target_oid = resolved_target.target().ok_or(git2::Error::from_str("Unable to find OID for target reference"))?;
+    let target_oid =
+        resolve_oid(target_ref, &remote_ls).ok_or(git2::Error::from_str("Unable to find OID for target reference"))?;
 
     info!("Fetching notes for commits");
     let commits: Vec<String> = oids.values().map(|oid| format!("{}", oid)).collect();
@@ -212,6 +191,19 @@ fn process_loop(repo: &git::Repository,
 
     remote.disconnect();
     Ok(())
+}
+
+fn resolve_oids(references: &[&str], remote_ls: &[git::RemoteHead]) -> HashMap<String, Option<git2::Oid>> {
+    references.iter()
+        .map(|reference| (reference.to_string(), resolve_oid(reference, remote_ls)))
+        .collect()
+}
+
+fn resolve_oid(reference: &str, remote_ls: &[git::RemoteHead]) -> Option<git2::Oid> {
+    match remote_ls.iter().find(|head| head.name == *reference) {
+        Some(head) => Some(head.oid),
+        None => None,
+    }
 }
 
 fn to_option_str(opt: &Option<String>) -> Option<&str> {

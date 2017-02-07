@@ -7,6 +7,7 @@ extern crate regex;
 extern crate rustc_serialize;
 extern crate toml;
 
+#[macro_use]
 mod utils;
 pub mod merger;
 pub mod git;
@@ -73,14 +74,14 @@ impl<'config> RepositoryConfiguration<'config> {
                 info!("Target Reference Specified: {}", reference);
                 let remote_refs = remote.remote_ls()?;
                 if let None = remote_refs.iter().find(|head| &head.name == reference) {
-                    return Err(git2::Error::from_str(&format!("Could not find {} on remote", reference)));
+                    return Err(git_err!(&format!("Could not find {} on remote", reference)));
                 }
                 Ok(reference.to_string())
             }
             None => {
                 let head = remote.head()?;
                 if let None = head {
-                    return Err(git2::Error::from_str("Could not find a default HEAD on remote"));
+                    return Err(git_err!("Could not find a default HEAD on remote"));
                 }
                 let head = head.unwrap();
                 info!("Target Reference set to remote HEAD: {}", head);

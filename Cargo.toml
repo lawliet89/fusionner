@@ -19,7 +19,7 @@ doc = true
 
 [dependencies]
 docopt = "0.7.0"
-env_logger = "0.4.0"
+fern = "0.2.*"
 git2 = { path = "git2-rs", version = "0.6" }
 libgit2-sys = { path = "git2-rs/libgit2-sys", version = "0.6.6" }
 log = "0.3"

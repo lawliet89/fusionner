@@ -55,7 +55,7 @@ impl<'repo> Merger<'repo> {
     /// Add refspecs to a remote to fetch/push commit notes, specific for fusionner
     pub fn add_note_refspecs(&self) -> Result<(), git2::Error> {
         let src = self.notes_reference_base();
-        let refspec = self.remote.generate_refspec(&src, true).map_err(|e| git2::Error::from_str(&e))?;
+        let refspec = self.remote.generate_refspec(&src, true).map_err(|e| git_err!(&e))?;
 
         self.remote.add_refspec(&refspec, git2::Direction::Fetch)?;
         self.remote.add_refspec(&refspec, git2::Direction::Push)
@@ -73,8 +73,8 @@ impl<'repo> Merger<'repo> {
         let notes_ref = self.notes_reference_base();
         let note = self.repository.repository.find_note(Some(&notes_ref), oid)?;
         note.message()
-            .ok_or(git2::Error::from_str(&"Invalid message in note for oid"))
-            .and_then(|note| super::deserialize_toml(&note).map_err(|e| git2::Error::from_str(&e)))
+            .ok_or(git_err!(&"Invalid message in note for oid"))
+            .and_then(|note| super::deserialize_toml(&note).map_err(|e| git_err!(&e)))
     }
 
     /// Determine if a merge should be made
@@ -108,7 +108,7 @@ impl<'repo> Merger<'repo> {
         debug!("Merging index");
         let mut merged_index = self.repository.repository.merge_commits(&our_commit, &their_commit, None)?;
         if index_in_conflict(&mut merged_index.iter()) {
-            return Err(git2::Error::from_str("Index is in conflict after merge -- skipping"));
+            return Err(git_err!("Index is in conflict after merge -- skipping"));
         }
 
         debug!("Writing tree");
@@ -139,7 +139,7 @@ impl<'repo> Merger<'repo> {
 
     pub fn add_note(&self, note: &Note, oid: git2::Oid) -> Result<git2::Oid, git2::Error> {
         let signature = self.repository.signature()?;
-        let serialized_note = super::serialize_toml(&note).map_err(|e| git2::Error::from_str(&e))?;
+        let serialized_note = super::serialize_toml(&note).map_err(|e| git_err!(&e))?;
 
         self.repository.repository.note(&signature,
                                         &signature,
@@ -201,7 +201,7 @@ impl MergeReferenceNamer {
 
     pub fn add_default_refspecs(remote: &Remote) -> Result<(), git2::Error> {
         let src = MergeReferenceNamer::Default.reference();
-        let refspec = remote.generate_refspec(&src, true).map_err(|e| git2::Error::from_str(&e))?;
+        let refspec = remote.generate_refspec(&src, true).map_err(|e| git_err!(&e))?;
         remote.add_refspec(&refspec, git2::Direction::Push)
     }
 }

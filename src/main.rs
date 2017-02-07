@@ -1,6 +1,6 @@
 extern crate fusionner;
 extern crate docopt;
-extern crate env_logger;
+extern crate fern;
 extern crate git2;
 extern crate libgit2_sys as git2_raw;
 #[macro_use]
@@ -9,6 +9,7 @@ extern crate regex;
 extern crate rustc_serialize;
 extern crate toml;
 
+#[macro_use]
 mod utils;
 
 use std::env;
@@ -43,15 +44,33 @@ struct Args {
 
 const DEFAULT_INTERVAL: u64 = 30;
 
+macro_rules! return_if_empty {
+    ($x:expr, $err:expr) => {
+        {
+            let x = $x;
+            match x.len() {
+                0 => return Err($err),
+                _ => x
+            }
+        }
+    }
+}
+
+macro_rules! map_err {
+    ($x:expr) => {
+        $x.map_err(|e| format!("{:?}", e))
+    }
+}
+
 fn main() {
     let return_code;
     {
-        env::set_var("RUST_LOG", "fusionner=debug"); // TODO: use a proper logger
-
-        env_logger::init().unwrap();
         let args: Args = Docopt::new(USAGE)
             .and_then(|d| d.decode())
             .unwrap_or_else(|e| e.exit());
+
+        let logger_config = configure_logger();
+        logger_config.into_logger();
 
         debug!("Arguments parsed: {:?}", args);
 
@@ -74,37 +93,34 @@ fn main() {
         return_code = match process(&config, &watch_refs) {
             Ok(_) => 0,
             Err(err) => {
-                println!("Error: {}", err);
+                error!("Error: {}", err);
                 1
             }
         };
     }
-    println!("Exiting with code {}", return_code);
+    info!("Exiting with code {}", return_code);
     std::process::exit(return_code);
 }
 
 fn process(config: &Config, watch_refs: &WatchReferences) -> Result<(), String> {
     // Create our structs
-    let repo = git::Repository::clone_or_open(&config.repository).map_err(|e| format!("{:?}", e))?;
+    let repo = map_err!(git::Repository::clone_or_open(&config.repository))?;
     let remote_name = to_option_str(&config.repository.remote);
-    let mut remote = repo.remote(remote_name).map_err(|e| format!("{:?}", e))?;
-    let mut merger =
-        merger::Merger::new(&repo,
-                            remote_name,
-                            to_option_str(&config.repository.notes_namespace)).map_err(|e| format!("{:?}", e))?;
+    let mut remote = map_err!(repo.remote(remote_name))?;
+    let mut merger = map_err!(merger::Merger::new(&repo,
+                                                  remote_name,
+                                                  to_option_str(&config.repository.notes_namespace)))?;
 
     // Add the necessary refspecs
-    merger.add_note_refspecs().map_err(|e| format!("{:?}", e))?;
-    merger::MergeReferenceNamer::add_default_refspecs(&remote).map_err(|e| format!("{:?}", e))?;
+    map_err!(merger.add_note_refspecs())?;
+    map_err!(merger::MergeReferenceNamer::add_default_refspecs(&remote))?;
 
-    remote.add_refspecs(&utils::as_str_slice(&config.repository.fetch_refspecs),
-                      git2::Direction::Fetch)
-        .map_err(|e| format!("{:?}", e))?;
-    remote.add_refspecs(&utils::as_str_slice(&config.repository.push_refspecs),
-                      git2::Direction::Push)
-        .map_err(|e| format!("{:?}", e))?;
+    map_err!(remote.add_refspecs(&utils::as_str_slice(&config.repository.fetch_refspecs),
+                                 git2::Direction::Fetch))?;
+    map_err!(remote.add_refspecs(&utils::as_str_slice(&config.repository.push_refspecs),
+                                 git2::Direction::Push))?;
 
-    let target_ref = config.repository.resolve_target_ref(&mut remote).map_err(|e| format!("{:?}", e))?;
+    let target_ref = map_err!(config.repository.resolve_target_ref(&mut remote))?;
 
     // Setup intervals
     let interal_seconds = config.interval.or(Some(DEFAULT_INTERVAL)).unwrap();
@@ -112,7 +128,7 @@ fn process(config: &Config, watch_refs: &WatchReferences) -> Result<(), String> 
 
     loop {
         if let Err(e) = process_loop(&mut remote, &mut merger, watch_refs, &target_ref) {
-            println!("Error: {:?}", e);
+            warn!("Error: {:?}", e);
         }
         info!("Sleeping for {:?} seconds", interal_seconds);
         std::thread::sleep(interval);
@@ -121,7 +137,6 @@ fn process(config: &Config, watch_refs: &WatchReferences) -> Result<(), String> 
     Ok(())
 }
 
-// TODO: Early return if nothing is found
 fn process_loop(remote: &mut git::Remote,
                 merger: &mut merger::Merger,
                 watch_refs: &WatchReferences,
@@ -129,12 +144,13 @@ fn process_loop(remote: &mut git::Remote,
                 -> Result<(), git2::Error> {
 
     info!("Retrieving remote heads");
-    let remote_ls = remote.remote_ls()?; // Update remote heads
+    let remote_ls = return_if_empty!(remote.remote_ls()?, git_err!("No remote references found"));
 
     info!("{} remote heads found", remote_ls.len());
     debug!("{:?}", remote_ls);
 
-    let watch_heads = watch_refs.resolve_watch_refs(&remote_ls);
+    let watch_heads = return_if_empty!(watch_refs.resolve_watch_refs(&remote_ls),
+                                       git_err!("No matching watched reference found"));
 
     info!("{} remote references matched watch references",
           watch_heads.len());
@@ -157,11 +173,11 @@ fn process_loop(remote: &mut git::Remote,
         })
         .map(|(reference, oid)| (reference.to_string(), oid.unwrap()))
         .collect();
+    let oids = return_if_empty!(oids, git_err!("No valid OIDs resolved"));
     debug!("{:?}", oids);
 
     info!("Resolving reference and OID for target reference");
-    let target_oid =
-        resolve_oid(target_ref, &remote_ls).ok_or(git2::Error::from_str("Unable to find OID for target reference"))?;
+    let target_oid = resolve_oid(target_ref, &remote_ls).ok_or(git_err!("Unable to find OID for target reference"))?;
 
     info!("Fetching notes for commits");
     let commits: Vec<String> = oids.values().map(|oid| format!("{}", oid)).collect();
@@ -191,6 +207,19 @@ fn process_loop(remote: &mut git::Remote,
 
     remote.disconnect();
     Ok(())
+}
+
+fn configure_logger() -> fern::DispatchConfig {
+    fern::DispatchConfig {
+        format: Box::new(|msg: &str, level: &log::LogLevel, _location: &log::LogLocation| {
+            format!("[{}][{}] {}",
+                    time::now().strftime("%Y-%m-%d][%H:%M:%S").unwrap(),
+                    level,
+                    msg)
+        }),
+        output: vec![fern::OutputConfig::stdout()],
+        level: log::LogLevelFilter::Info,
+    }
 }
 
 fn resolve_oids(references: &[&str], remote_ls: &[git::RemoteHead]) -> HashMap<String, Option<git2::Oid>> {

@@ -7,7 +7,7 @@ use super::RepositoryConfiguration;
 
 pub struct Repository<'repo> {
     pub repository: git2::Repository,
-    details: &'repo RepositoryConfiguration<'repo>,
+    details: &'repo RepositoryConfiguration,
 }
 
 pub struct Remote<'repo> {
@@ -38,17 +38,14 @@ impl RemoteHead {
 }
 
 impl<'repo> Repository<'repo> {
-    pub fn new(repository: git2::Repository,
-               configuration: &'repo RepositoryConfiguration<'repo>)
-               -> Repository<'repo> {
+    pub fn new(repository: git2::Repository, configuration: &'repo RepositoryConfiguration) -> Repository<'repo> {
         Repository {
             repository: repository,
             details: configuration,
         }
     }
 
-    pub fn clone_or_open(repo_details: &'repo RepositoryConfiguration<'repo>)
-                         -> Result<Repository<'repo>, git2::Error> {
+    pub fn clone_or_open(repo_details: &'repo RepositoryConfiguration) -> Result<Repository<'repo>, git2::Error> {
         Repository::open(repo_details).or_else(|err| if err.code() == git2::ErrorCode::NotFound {
             info!("Repository not found at {} -- cloning",
                   repo_details.checkout_path);
@@ -58,12 +55,12 @@ impl<'repo> Repository<'repo> {
         })
     }
 
-    pub fn open(repo_details: &'repo RepositoryConfiguration<'repo>) -> Result<Repository<'repo>, git2::Error> {
+    pub fn open(repo_details: &'repo RepositoryConfiguration) -> Result<Repository<'repo>, git2::Error> {
         info!("Opening repository at {}", &repo_details.checkout_path);
         git2::Repository::open(&repo_details.checkout_path).and_then(|repo| Ok(Repository::new(repo, repo_details)))
     }
 
-    pub fn clone(repo_details: &'repo RepositoryConfiguration<'repo>) -> Result<Repository<'repo>, git2::Error> {
+    pub fn clone(repo_details: &'repo RepositoryConfiguration) -> Result<Repository<'repo>, git2::Error> {
         let remote_callbacks = Repository::remote_callbacks(repo_details);
 
         let mut fetch_optoons = git2::FetchOptions::new();
@@ -79,7 +76,7 @@ impl<'repo> Repository<'repo> {
             .and_then(|repo| Ok(Repository::new(repo, repo_details)))
     }
 
-    fn remote_callbacks(repo_details: &'repo RepositoryConfiguration<'repo>) -> git2::RemoteCallbacks<'repo> {
+    fn remote_callbacks(repo_details: &'repo RepositoryConfiguration) -> git2::RemoteCallbacks<'repo> {
         debug!("Making remote authentication callbacks");
         let mut remote_callbacks = git2::RemoteCallbacks::new();
         let repo_details = repo_details.clone();
@@ -289,7 +286,7 @@ impl<'repo> Remote<'repo> {
         })
     }
 
-    fn direction_eq(left: &git2::Direction, right: &git2::Direction) -> bool {
+    pub fn direction_eq(left: &git2::Direction, right: &git2::Direction) -> bool {
         use git2::Direction::*;
 
         match (left, right) {

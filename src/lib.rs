@@ -12,28 +12,28 @@ extern crate url;
 
 #[macro_use]
 mod utils;
+#[cfg(test)]
+#[macro_use]
+mod test;
 pub mod merger;
 pub mod git;
-#[cfg(test)]
-mod test;
 
 use std::collections::HashSet;
 use std::fs::File;
 use std::io::Read;
-use std::marker::PhantomData;
 use std::vec::Vec;
 
 use regex::RegexSet;
 use rustc_serialize::{Decodable, Encodable};
 
 #[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
-pub struct Config<'config> {
-    pub repository: RepositoryConfiguration<'config>,
+pub struct Config {
+    pub repository: RepositoryConfiguration,
     pub interval: Option<u64>,
 }
 
 #[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
-pub struct RepositoryConfiguration<'config> {
+pub struct RepositoryConfiguration {
     pub uri: String,
     pub checkout_path: String,
     pub remote: Option<String>,
@@ -48,7 +48,6 @@ pub struct RepositoryConfiguration<'config> {
     // Matching settings
     pub merge_ref: Option<String>,
     pub target_ref: Option<String>, // TODO: Support specifying branch name instead of references
-    pub _marker: PhantomData<&'config String>,
     // Signature settings
     pub signature_name: Option<String>,
     pub signature_email: Option<String>,
@@ -61,7 +60,7 @@ pub struct WatchReferences {
     exact_list: Vec<String>,
 }
 
-impl<'config> Config<'config> {
+impl Config {
     pub fn read_config(path: &str) -> Result<Config, String> {
         info!("Reading configuration from '{}'", path);
         let mut file = File::open(&path).map_err(|e| format!("{:?}", e))?;
@@ -72,7 +71,7 @@ impl<'config> Config<'config> {
     }
 }
 
-impl<'config> RepositoryConfiguration<'config> {
+impl RepositoryConfiguration {
     pub fn resolve_target_ref(&self, remote: &mut git::Remote) -> Result<String, git2::Error> {
         match self.target_ref {
             Some(ref reference) => {

@@ -77,6 +77,19 @@ impl<'repo> Merger<'repo> {
             .and_then(|note| super::deserialize_toml(&note).map_err(|e| git_err!(&e)))
     }
 
+    /// Returns OID of note
+    pub fn add_note(&self, note: &Note, oid: git2::Oid) -> Result<git2::Oid, git2::Error> {
+        let signature = self.repository.signature()?;
+        let serialized_note = super::serialize_toml(&note).map_err(|e| git_err!(&e))?;
+
+        self.repository.repository.note(&signature,
+                                        &signature,
+                                        Some(&self.notes_reference_base()),
+                                        oid,
+                                        &serialized_note,
+                                        true)
+    }
+
     /// Determine if a merge should be made
     pub fn should_merge(&self, oid: git2::Oid, target_oid: git2::Oid) -> (bool, Option<Note>) {
         info!("Deciding if we should merge {} into {}", oid, target_oid);
@@ -135,18 +148,6 @@ impl<'repo> Merger<'repo> {
                     &[&our_commit, &their_commit])?;
 
         Ok(Note::new(merge_oid, target_oid, &[oid], Some(&commit_reference)))
-    }
-
-    pub fn add_note(&self, note: &Note, oid: git2::Oid) -> Result<git2::Oid, git2::Error> {
-        let signature = self.repository.signature()?;
-        let serialized_note = super::serialize_toml(&note).map_err(|e| git_err!(&e))?;
-
-        self.repository.repository.note(&signature,
-                                        &signature,
-                                        Some(&self.notes_reference_base()),
-                                        oid,
-                                        &serialized_note,
-                                        true)
     }
 
     pub fn push(&mut self) -> Result<(), git2::Error> {
@@ -224,13 +225,118 @@ fn index_in_conflict(entries: &mut git2::IndexEntries) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use merger::Merger;
+    use merger::{Merger, Note};
+    use git;
+    use git2;
 
-    #[test]
-    fn default_refspecs_are_added() {
-        let (td, repo) = ::test::repo_init();
-        let remote = repo.remote("origin", "/path/to/nowhere").unwrap();
-        let merger = Merger::new(&repo, remote, None);
+    fn head_oid(repo: &git::Repository) -> git2::Oid {
+        let reference = not_err!(repo.repository.head());
+        not_none!(reference.target())
     }
 
+    fn make_note(oid: git2::Oid) -> Note {
+        Note::new(oid, oid, &[oid], Some("refs/fusionner/some-merge"))
+    }
+
+    fn add_branch_commit(repo: &git::Repository) -> git2::Oid {
+        let repo = &repo.repository;
+        let mut index = repo.index().unwrap();
+        let id = index.write_tree().unwrap();
+
+        let tree = repo.find_tree(id).unwrap();
+        let sig = repo.signature().unwrap();
+        repo.commit(Some("refs/heads/branch"), &sig, &sig, "branch",
+                    &tree, &[]).unwrap()
+    }
+
+    #[test]
+    fn default_note_refspecs_are_added() {
+        let (td, _raw) = ::test::raw_repo_init();
+        let config = ::test::config_init(&td);
+        let repo = ::test::repo_init(&config);
+        let merger = not_err!(Merger::new(&repo, None, None));
+        not_err!(merger.add_note_refspecs());
+
+        let remote = repo.remote(None).unwrap();
+
+        not_none!(remote.refspecs().find(|r| {
+            let refspec = r.str();
+            let direction = git2::Direction::Fetch;
+            refspec.is_some() && refspec.unwrap() == "+refs/notes/fusionner:refs/remotes/origin/notes/fusionner" &&
+            git::Remote::direction_eq(&r.direction(), &direction)
+        }));
+
+        not_none!(remote.refspecs().find(|r| {
+            let refspec = r.str();
+            let direction = git2::Direction::Push;
+            refspec.is_some() && refspec.unwrap() == "+refs/notes/fusionner:refs/remotes/origin/notes/fusionner" &&
+            git::Remote::direction_eq(&r.direction(), &direction)
+        }));
+    }
+
+    #[test]
+    fn custom_note_refspecs_are_added() {
+        let (td, _raw) = ::test::raw_repo_init();
+        let config = ::test::config_init(&td);
+        let repo = ::test::repo_init(&config);
+        let merger = not_err!(Merger::new(&repo, None, Some("foobar")));
+        not_err!(merger.add_note_refspecs());
+
+        let remote = repo.remote(None).unwrap();
+
+        not_none!(remote.refspecs().find(|r| {
+            let refspec = r.str();
+            let direction = git2::Direction::Fetch;
+            refspec.is_some() && refspec.unwrap() == "+refs/notes/foobar:refs/remotes/origin/notes/foobar" &&
+            git::Remote::direction_eq(&r.direction(), &direction)
+        }));
+
+        not_none!(remote.refspecs().find(|r| {
+            let refspec = r.str();
+            let direction = git2::Direction::Push;
+            refspec.is_some() && refspec.unwrap() == "+refs/notes/foobar:refs/remotes/origin/notes/foobar" &&
+            git::Remote::direction_eq(&r.direction(), &direction)
+        }));
+    }
+
+    #[test]
+    fn notes_are_added_and_retrieved() {
+        let (td, _raw) = ::test::raw_repo_init();
+        let config = ::test::config_init(&td);
+        let repo = ::test::repo_init(&config);
+        let merger = not_err!(Merger::new(&repo, None, Some("foobar")));
+        let oid = head_oid(&repo);
+
+        let note = make_note(oid);
+        not_err!(merger.add_note(&note, oid));
+
+        let found_note = not_err!(merger.find_note(oid));
+
+        assert_eq!(note, found_note);
+    }
+
+    #[test]
+    fn should_merge_on_missing_note() {
+        let (td, _raw) = ::test::raw_repo_init();
+        let config = ::test::config_init(&td);
+        let repo = ::test::repo_init(&config);
+        let merger = not_err!(Merger::new(&repo, None, Some("foobar")));
+
+        let oid = head_oid(&repo);
+        let branch_oid = add_branch_commit(&repo);
+
+        let (should_merge, note) = merger.should_merge(branch_oid, oid);
+        assert!(should_merge);
+        assert!(note.is_none());
+    }
+
+    #[test]
+    fn should_merge_on_unequal_target_oid() {
+
+    }
+
+    #[test]
+    fn should_not_merge_on_equal_target_oid() {
+
+    }
 }

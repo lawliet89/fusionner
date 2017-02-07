@@ -178,7 +178,7 @@ fn process_loop(repo: &git::Repository,
 
     info!("Retrieving remote heads");
     let remote_ls = remote.remote_ls()?; // Update remote heads
-    let remote_ls: Vec<String> = remote_ls.iter().map(|r| r.flatten_clone()).collect();
+
     info!("{} remote heads found", remote_ls.len());
     debug!("{:?}", remote_ls);
 
@@ -286,8 +286,11 @@ fn resolve_target_ref(target_ref: &Option<String>, remote: &mut git::Remote) -> 
     }
 }
 
-fn resolve_watch_refs(watchrefs: &WatchReferences, remote_ls: &[String]) -> HashSet<String> {
+fn resolve_watch_refs(watchrefs: &WatchReferences, remote_ls: &Vec<git::RemoteHead>) -> HashSet<String> {
     let mut refs = HashSet::new();
+
+    // Flatten and resolve symbolic targets
+    let remote_ls: Vec<String> = remote_ls.iter().map(|r| r.flatten_clone()).collect();
 
     for exact_match in watchrefs.exact_list.iter().filter(|s| remote_ls.contains(s)) {
         refs.insert(exact_match.to_string());

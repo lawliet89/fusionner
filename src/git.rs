@@ -236,6 +236,22 @@ impl<'repo> Remote<'repo> {
         self.remote.push(refspecs, Some(&mut push_options))
     }
 
+    /// For a given local reference, generate a refspec for the remote with the same path on remote
+    /// i.e. refs/pulls/*  --> refs/pulls/*:refs/remote/origin/pulls/*
+    pub fn generate_refspec(&self, src: &str, force: bool) -> Result<String, String> {
+        let parts: Vec<&str> = src.split('/').collect();
+        if parts[0] != "refs" {
+            return Err("Invalid reference -- does not begin with refs/".to_string());
+        }
+        let prepend = vec!["refs", "remotes", self.name().ok_or("Un-named remote")?];
+        let dest: Vec<&&str> = prepend.iter().chain(parts.iter().skip(1)).collect();
+        let dest = dest.iter().map(|s| **s).collect::<Vec<&str>>().join("/");
+
+        let force_flag = if force { "+" } else { "" };
+
+        Ok(format!("{}{}:{}", force_flag, src, dest))
+    }
+
     pub fn add_refspec(&self, refspec: &str, direction: git2::Direction) -> Result<(), git2::Error> {
         let remote_name = self.name().ok_or(git2::Error::from_str("Un-named remote used"))?;
 

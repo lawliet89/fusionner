@@ -2,6 +2,19 @@
 name = "fusionner"
 version = "0.1.0"
 authors = ["Yong Wen Chua <me@yongwen.xyz>"]
+license = "Apache-2.0"
+
+[[bin]]
+name = "fusionner"
+path = "src/main.rs"
+test = true
+
+[lib]
+name = "fusionner"
+path = "src/lib.rs"
+test = true
+doctest = true
+doc = true
 
 [dependencies]
 docopt = "0.7.0"

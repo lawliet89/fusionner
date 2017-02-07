@@ -8,6 +8,7 @@ license = "Apache-2.0"
 name = "fusionner"
 path = "src/main.rs"
 test = true
+doc = false
 
 [lib]
 name = "fusionner"

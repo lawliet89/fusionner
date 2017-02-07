@@ -1,6 +1,6 @@
 use std::vec::Vec;
 
-use super::git2;
+use super::{git2, git2_raw};
 use super::git::{Repository, Remote};
 use super::utils;
 
@@ -74,7 +74,7 @@ impl<'repo> Merger<'repo> {
         let note = self.repository.repository.find_note(Some(&notes_ref), oid)?;
         note.message()
             .ok_or(git2::Error::from_str(&"Invalid message in note for oid"))
-            .and_then(|note| utils::deserialize_toml(&note).map_err(|e| git2::Error::from_str(&e)))
+            .and_then(|note| super::deserialize_toml(&note).map_err(|e| git2::Error::from_str(&e)))
     }
 
     /// Determine if a merge should be made
@@ -107,7 +107,7 @@ impl<'repo> Merger<'repo> {
 
         debug!("Merging index");
         let mut merged_index = self.repository.repository.merge_commits(&our_commit, &their_commit, None)?;
-        if utils::index_in_conflict(&mut merged_index.iter()) {
+        if index_in_conflict(&mut merged_index.iter()) {
             return Err(git2::Error::from_str("Index is in conflict after merge -- skipping"));
         }
 
@@ -139,7 +139,7 @@ impl<'repo> Merger<'repo> {
 
     pub fn add_note(&self, note: &Note, oid: git2::Oid) -> Result<git2::Oid, git2::Error> {
         let signature = self.repository.signature()?;
-        let serialized_note = utils::serialize_toml(&note).map_err(|e| git2::Error::from_str(&e))?;
+        let serialized_note = super::serialize_toml(&note).map_err(|e| git2::Error::from_str(&e))?;
 
         self.repository.repository.note(&signature,
                                         &signature,
@@ -204,4 +204,20 @@ impl MergeReferenceNamer {
         let refspec = remote.generate_refspec(&src, true).map_err(|e| git2::Error::from_str(&e))?;
         remote.add_refspec(&refspec, git2::Direction::Push)
     }
+}
+
+/// Gets the stage number from a Git index entry
+/// The meaning of the fields corresponds to core Git's documentation (in "Documentation/technical/index-format.txt").
+fn git_index_entry_stage(entry: &git2::IndexEntry) -> u16 {
+    (entry.flags & git2_raw::GIT_IDXENTRY_STAGEMASK) >> git2_raw::GIT_IDXENTRY_STAGESHIFT
+}
+
+/// From the stage number of a Git Index entry, determine if it's in conflict
+/// https://libgit2.github.com/libgit2/#HEAD/group/index/git_index_entry_is_conflict
+fn git_index_entry_is_conflict(entry: &git2::IndexEntry) -> bool {
+    git_index_entry_stage(entry) > 0
+}
+
+fn index_in_conflict(entries: &mut git2::IndexEntries) -> bool {
+    entries.any(|ref entry| git_index_entry_is_conflict(entry))
 }

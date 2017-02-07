@@ -1,3 +1,4 @@
+extern crate fusionner;
 extern crate docopt;
 extern crate env_logger;
 extern crate git2;
@@ -9,18 +10,14 @@ extern crate rustc_serialize;
 extern crate toml;
 
 mod utils;
-mod merger;
-mod git;
 
 use std::env;
-use std::fs::File;
-use std::io::Read;
-use std::marker::PhantomData;
-use std::collections::{HashSet, HashMap};
+use std::collections::HashMap;
 use std::vec::Vec;
 
+use fusionner::*;
+use fusionner::{merger, git};
 use docopt::Docopt;
-use regex::RegexSet;
 
 const USAGE: &'static str = "
 fusionner
@@ -46,55 +43,6 @@ struct Args {
 
 const DEFAULT_INTERVAL: u64 = 30;
 
-#[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
-pub struct Config<'config> {
-    repository: RepositoryConfiguration<'config>,
-    interval: Option<u64>,
-}
-
-#[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
-pub struct RepositoryConfiguration<'config> {
-    uri: String,
-    checkout_path: String,
-    remote: Option<String>,
-    notes_namespace: Option<String>,
-    fetch_refspecs: Vec<String>,
-    push_refspecs: Vec<String>,
-    // Authentication Options
-    username: Option<String>,
-    password: Option<String>,
-    key: Option<String>,
-    key_passphrase: Option<String>,
-    // Matching settings
-    merge_ref: Option<String>,
-    target_ref: Option<String>, // TODO: Support specifying branch name instead of references
-    _marker: PhantomData<&'config String>,
-    // Signature settings
-    signature_name: Option<String>,
-    signature_email: Option<String>,
-}
-
-/// "Compiled" watch reference
-#[derive(Debug)]
-pub struct WatchReferences {
-    regex_set: RegexSet,
-    exact_list: Vec<String>,
-}
-
-impl WatchReferences {
-    fn new<T: AsRef<str>>(exacts: &[T], regexes: &[T]) -> Result<WatchReferences, regex::Error>
-        where T: std::fmt::Display
-    {
-        let exact_list = exacts.iter().map(|s| s.to_string()).collect();
-        let regex_set = RegexSet::new(regexes)?;
-
-        Ok(WatchReferences {
-            regex_set: regex_set,
-            exact_list: exact_list,
-        })
-    }
-}
-
 fn main() {
     let return_code;
     {
@@ -107,7 +55,7 @@ fn main() {
 
         debug!("Arguments parsed: {:?}", args);
 
-        let config = read_config(&args.arg_configuration_file)
+        let config = Config::read_config(&args.arg_configuration_file)
             .map_err(|err| {
                 panic!("Failed to read configuration file {}: {}",
                        &args.arg_configuration_file,
@@ -137,12 +85,12 @@ fn main() {
 
 fn process(config: &Config, watch_refs: &WatchReferences) -> Result<(), String> {
     let repo = git::Repository::clone_or_open(&config.repository).map_err(|e| format!("{:?}", e))?;
-    let remote_name = utils::to_option_str(&config.repository.remote);
+    let remote_name = to_option_str(&config.repository.remote);
     let mut remote = repo.remote(remote_name).map_err(|e| format!("{:?}", e))?;
     let mut merger =
         merger::Merger::new(&repo,
                             remote_name,
-                            utils::to_option_str(&config.repository.notes_namespace)).map_err(|e| format!("{:?}", e))?;
+                            to_option_str(&config.repository.notes_namespace)).map_err(|e| format!("{:?}", e))?;
     merger.add_note_refspecs().map_err(|e| format!("{:?}", e))?;
     merger::MergeReferenceNamer::add_default_refspecs(&remote).map_err(|e| format!("{:?}", e))?;
 
@@ -156,7 +104,7 @@ fn process(config: &Config, watch_refs: &WatchReferences) -> Result<(), String> 
     let interal_seconds = config.interval.or(Some(DEFAULT_INTERVAL)).unwrap();
     let interval = std::time::Duration::from_secs(interal_seconds);
 
-    let target_ref = resolve_target_ref(&config.repository.target_ref, &mut remote).map_err(|e| format!("{:?}", e))?;
+    let target_ref = config.repository.resolve_target_ref(&mut remote).map_err(|e| format!("{:?}", e))?;
 
     loop {
         if let Err(e) = process_loop(&repo, &mut remote, &mut merger, watch_refs, &target_ref) {
@@ -169,6 +117,7 @@ fn process(config: &Config, watch_refs: &WatchReferences) -> Result<(), String> 
     Ok(())
 }
 
+// TODO: Early return if nothing is found
 fn process_loop(repo: &git::Repository,
                 remote: &mut git::Remote,
                 merger: &mut merger::Merger,
@@ -182,7 +131,7 @@ fn process_loop(repo: &git::Repository,
     info!("{} remote heads found", remote_ls.len());
     debug!("{:?}", remote_ls);
 
-    let watch_heads = resolve_watch_refs(&watch_refs, &remote_ls);
+    let watch_heads = watch_refs.resolve_watch_refs(&remote_ls);
 
     info!("{} remote references matched watch references",
           watch_heads.len());
@@ -193,6 +142,7 @@ fn process_loop(repo: &git::Repository,
     fetch_refs.push(target_ref);
     remote.fetch(&fetch_refs)?;
 
+    // TODO: Resolve via remote heads
     info!("Resolving references");
     let references: HashMap<String, git2::Reference> = watch_heads.iter()
         .map(|reference| {
@@ -264,50 +214,6 @@ fn process_loop(repo: &git::Repository,
     Ok(())
 }
 
-fn resolve_target_ref(target_ref: &Option<String>, remote: &mut git::Remote) -> Result<String, git2::Error> {
-    match target_ref {
-        &Some(ref reference) => {
-            info!("Target Reference Specified: {}", reference);
-            let remote_refs = remote.remote_ls()?;
-            if let None = remote_refs.iter().find(|head| &head.name == reference) {
-                return Err(git2::Error::from_str(&format!("Could not find {} on remote", reference)));
-            }
-            Ok(reference.to_string())
-        }
-        &None => {
-            let head = remote.head()?;
-            if let None = head {
-                return Err(git2::Error::from_str("Could not find a default HEAD on remote"));
-            }
-            let head = head.unwrap();
-            info!("Target Reference set to remote HEAD: {}", head);
-            Ok(head)
-        }
-    }
-}
-
-fn resolve_watch_refs(watchrefs: &WatchReferences, remote_ls: &Vec<git::RemoteHead>) -> HashSet<String> {
-    let mut refs = HashSet::new();
-
-    // Flatten and resolve symbolic targets
-    let remote_ls: Vec<String> = remote_ls.iter().map(|r| r.flatten_clone()).collect();
-
-    for exact_match in watchrefs.exact_list.iter().filter(|s| remote_ls.contains(s)) {
-        refs.insert(exact_match.to_string());
-    }
-
-    for regex_match in remote_ls.iter().filter(|s| watchrefs.regex_set.is_match(s)) {
-        refs.insert(regex_match.to_string());
-    }
-
-    refs
-}
-
-fn read_config(path: &str) -> Result<Config, String> {
-    info!("Reading configuration from '{}'", path);
-    let mut file = File::open(&path).map_err(|e| format!("{:?}", e))?;
-    let mut config_toml = String::new();
-    file.read_to_string(&mut config_toml).map_err(|e| format!("{:?}", e))?;
-
-    utils::deserialize_toml(&config_toml)
+fn to_option_str(opt: &Option<String>) -> Option<&str> {
+    opt.as_ref().map(|s| &**s)
 }

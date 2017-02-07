@@ -143,6 +143,7 @@ impl<'repo> Merger<'repo> {
     }
 
     pub fn push(&mut self) -> Result<(), git2::Error> {
+        info!("Pushing with configured refspecs");
         self.remote.push(&[])
     }
 

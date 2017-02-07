@@ -215,26 +215,32 @@ fn process_loop(remote: &mut git::Remote,
 
 // TODO: Support logging to file/stderr/etc.
 fn configure_logger<'a>(log_level: &Option<String>) -> fern::DispatchConfig<'a> {
-    let log_level = resolve_log_level(log_level);
+    let log_level = resolve_log_level(log_level)
+        .or_else(|| {
+            panic!("Unknown log level `{}``", log_level.as_ref().unwrap());
+        })
+        .unwrap();
 
     fern::DispatchConfig {
         format: Box::new(|msg: &str, level: &log::LogLevel, _location: &log::LogLocation| {
             format!("[{}][{}] {}",
-                    time::now().strftime("%FT%T%z").unwrap(), level, msg)
+                    time::now().strftime("%FT%T%z").unwrap(),
+                    level,
+                    msg)
         }),
         output: vec![fern::OutputConfig::stdout()],
         level: log_level,
     }
 }
 
-fn resolve_log_level(log_level: &Option<String>) -> log::LogLevelFilter {
+fn resolve_log_level(log_level: &Option<String>) -> Option<log::LogLevelFilter> {
     match to_option_str(log_level) {
-        Some("trace") => log::LogLevelFilter::Trace,
-        Some("debug") => log::LogLevelFilter::Debug,
-        Some("warn") => log::LogLevelFilter::Warn,
-        Some("error") => log::LogLevelFilter::Error,
-        None | Some("info") => log::LogLevelFilter::Info,
-        Some(level @ _) => panic!("Unknown log level {}", level)
+        Some("trace") => Some(log::LogLevelFilter::Trace),
+        Some("debug") => Some(log::LogLevelFilter::Debug),
+        Some("warn") => Some(log::LogLevelFilter::Warn),
+        Some("error") => Some(log::LogLevelFilter::Error),
+        None | Some("info") => Some(log::LogLevelFilter::Info),
+        Some(_) => None,
     }
 }
 

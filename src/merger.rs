@@ -221,3 +221,16 @@ fn git_index_entry_is_conflict(entry: &git2::IndexEntry) -> bool {
 fn index_in_conflict(entries: &mut git2::IndexEntries) -> bool {
     entries.any(|ref entry| git_index_entry_is_conflict(entry))
 }
+
+#[cfg(test)]
+mod tests {
+    use merger::Merger;
+
+    #[test]
+    fn default_refspecs_are_added() {
+        let (td, repo) = ::test::repo_init();
+        let remote = repo.remote("origin", "/path/to/nowhere").unwrap();
+        let merger = Merger::new(&repo, remote, None);
+    }
+
+}

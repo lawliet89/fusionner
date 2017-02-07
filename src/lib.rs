@@ -5,11 +5,17 @@ extern crate log;
 extern crate regex;
 extern crate rustc_serialize;
 extern crate toml;
+#[cfg(test)]
+extern crate tempdir;
+#[cfg(test)]
+extern crate url;
 
 #[macro_use]
 mod utils;
 pub mod merger;
 pub mod git;
+#[cfg(test)]
+mod test;
 
 use std::collections::HashSet;
 use std::fs::File;

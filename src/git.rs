@@ -296,3 +296,28 @@ impl<'repo> Remote<'repo> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use git::Repository;
+    use tempdir::TempDir;
+
+    #[test]
+    fn smoke_test_opem() {
+        let (td, _raw) = ::test::raw_repo_init();
+        let config = ::test::config_init(&td);
+
+        not_err!(Repository::clone_or_open(&config));
+    }
+
+    #[test]
+    fn smoke_test_clone() {
+        let (td, _raw) = ::test::raw_repo_init();
+        let mut config = ::test::config_init(&td);
+
+        let td_new = TempDir::new("test").unwrap();
+        config.checkout_path = not_none!(td_new.path().to_str()).to_string();
+
+        not_err!(Repository::clone_or_open(&config));
+    }
+}

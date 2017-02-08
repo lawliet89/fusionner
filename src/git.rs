@@ -313,8 +313,12 @@ impl<'repo> Remote<'repo> {
 
 #[cfg(test)]
 mod tests {
-    use git::Repository;
+    use std::collections::HashMap;
+
+    use git2;
+    use git2_raw;
     use tempdir::TempDir;
+    use git::Repository;
 
     #[test]
     fn smoke_test_opem() {
@@ -333,5 +337,36 @@ mod tests {
         config.checkout_path = not_none!(td_new.path().to_str()).to_string();
 
         not_err!(Repository::clone_or_open(&config));
+    }
+
+    #[test]
+    fn resolve_credentials_smoke_test() {
+        let (td, _raw) = ::test::raw_repo_init();
+        let config = ::test::config_init(&td);
+
+        let test_types: HashMap<git2::CredentialType, git2_raw::git_credtype_t> =
+            [(git2::USERNAME, git2_raw::GIT_CREDTYPE_USERNAME),
+             (git2::USER_PASS_PLAINTEXT, git2_raw::GIT_CREDTYPE_USERPASS_PLAINTEXT),
+             (git2::SSH_KEY, git2_raw::GIT_CREDTYPE_SSH_KEY)]
+                .iter()
+                .cloned()
+                .collect();
+        for (requested_cred_type, expected_cred_type) in test_types {
+            let actual_cred = not_err!(Repository::resolve_credentials(&config, "", None, requested_cred_type));
+            assert_eq!(expected_cred_type, actual_cred.credtype());
+        }
+    }
+
+    #[test]
+    fn resolve_credentials_will_get_key_from_ssh_agent_in_absence_of_key() {
+        let (td, _raw) = ::test::raw_repo_init();
+        let mut config = ::test::config_init(&td);
+        config.key = None;
+
+        let requested_cred_type = git2::SSH_KEY;
+        let expected_cred_type = git2_raw::GIT_CREDTYPE_SSH_KEY;
+
+        let actual_cred = not_err!(Repository::resolve_credentials(&config, "", None, requested_cred_type));
+        assert_eq!(expected_cred_type, actual_cred.credtype());
     }
 }

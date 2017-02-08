@@ -245,8 +245,8 @@ mod tests {
 
         let tree = repo.find_tree(id).unwrap();
         let sig = repo.signature().unwrap();
-        repo.commit(Some("refs/heads/branch"), &sig, &sig, "branch",
-                    &tree, &[]).unwrap()
+        repo.commit(Some("refs/heads/branch"), &sig, &sig, "branch", &tree, &[])
+            .unwrap()
     }
 
     #[test]
@@ -297,6 +297,35 @@ mod tests {
             refspec.is_some() && refspec.unwrap() == "+refs/notes/foobar:refs/remotes/origin/notes/foobar" &&
             git::Remote::direction_eq(&r.direction(), &direction)
         }));
+    }
+
+    #[test]
+    fn merge_smoke_test() {
+        let (td, _raw) = ::test::raw_repo_init();
+        let config = ::test::config_init(&td);
+        let repo = ::test::repo_init(&config);
+        let merger = not_err!(Merger::new(&repo, None, Some("foobar")));
+
+        let oid = head_oid(&repo);
+        let branch_oid = add_branch_commit(&repo);
+
+        let (should_merge, found_note) = merger.should_merge(branch_oid, oid);
+        assert!(should_merge);
+        assert!(found_note.is_none());
+
+        // First merge completes successfully
+        not_err!(merger.merge(branch_oid, oid, "some-branch", ""));
+
+        // Second merge to the same reference should not fail
+        let note = not_err!(merger.merge(branch_oid, oid, "some-branch", ""));
+
+        // We can add the note to the repository
+        not_err!(merger.add_note(&note, branch_oid));
+
+        // And we should not meed to merge again
+        let (should_merge, found_note) = merger.should_merge(branch_oid, oid);
+        assert!(!should_merge);
+        assert_eq!(note, not_none!(found_note));
     }
 
     #[test]

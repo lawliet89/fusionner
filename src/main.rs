@@ -9,11 +9,20 @@ extern crate regex;
 extern crate rustc_serialize;
 extern crate time;
 extern crate toml;
+#[cfg(test)]
+extern crate tempdir;
+#[cfg(test)]
+extern crate url;
 
 #[macro_use]
 mod utils;
+#[cfg(test)]
+#[macro_use]
+mod test;
 
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::Read;
 use std::vec::Vec;
 
 use fusionner::*;
@@ -44,7 +53,28 @@ struct Args {
     arg_watch_ref: Vec<String>,
 }
 
+#[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
+/// Configuration for fusionner
+pub struct Config {
+    /// Repository configuration
+    pub repository: RepositoryConfiguration,
+    /// Interval, in seconds, between loops to look for new commits. Defaults to 30
+    pub interval: Option<u64>,
+}
+
 const DEFAULT_INTERVAL: u64 = 30;
+
+impl Config {
+    /// Read configuration from a TOML file
+    pub fn read_config(path: &str) -> Result<Config, String> {
+        info!("Reading configuration from '{}'", path);
+        let mut file = File::open(&path).map_err(|e| format!("{:?}", e))?;
+        let mut config_toml = String::new();
+        file.read_to_string(&mut config_toml).map_err(|e| format!("{:?}", e))?;
+
+        utils::deserialize_toml(&config_toml)
+    }
+}
 
 macro_rules! return_if_empty {
     ($x:expr, $err:expr) => {
@@ -259,4 +289,14 @@ fn resolve_oid(reference: &str, remote_ls: &[git::RemoteHead]) -> Option<git2::O
 
 fn to_option_str(opt: &Option<String>) -> Option<&str> {
     opt.as_ref().map(|s| &**s)
+}
+
+#[cfg(test)]
+mod tests {
+    use Config;
+
+    #[test]
+    fn config_reading_smoke_test() {
+        not_err!(Config::read_config("tests/fixtures/config.toml"));
+    }
 }

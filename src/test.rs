@@ -25,6 +25,7 @@ macro_rules! not_none {
     })
 }
 
+#[allow(dead_code)]
 pub fn raw_repo_init() -> (TempDir, git2::Repository) {
     let td = TempDir::new("test").unwrap();
     let repo = git2::Repository::init(td.path()).unwrap();
@@ -45,6 +46,7 @@ pub fn raw_repo_init() -> (TempDir, git2::Repository) {
     (td, repo)
 }
 
+#[allow(dead_code)]
 pub fn config_init(tempdir: &TempDir) -> ::RepositoryConfiguration {
     let path = tempdir.path();
     ::RepositoryConfiguration {
@@ -64,10 +66,12 @@ pub fn config_init(tempdir: &TempDir) -> ::RepositoryConfiguration {
     }
 }
 
+#[allow(dead_code)]
 pub fn repo_init<'a>(config: &'a ::RepositoryConfiguration) -> ::git::Repository<'a> {
     ::git::Repository::open(&config).unwrap()
 }
 
+#[allow(dead_code)]
 pub fn path2url(path: &Path) -> String {
     Url::from_file_path(path).unwrap().to_string()
 }

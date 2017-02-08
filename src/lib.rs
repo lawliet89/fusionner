@@ -19,18 +19,9 @@ pub mod merger;
 pub mod git;
 
 use std::collections::HashSet;
-use std::fs::File;
-use std::io::Read;
 use std::vec::Vec;
 
 use regex::RegexSet;
-use rustc_serialize::{Decodable, Encodable};
-
-#[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
-pub struct Config {
-    pub repository: RepositoryConfiguration,
-    pub interval: Option<u64>,
-}
 
 #[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
 pub struct RepositoryConfiguration {
@@ -57,17 +48,6 @@ pub struct RepositoryConfiguration {
 pub struct WatchReferences {
     regex_set: RegexSet,
     exact_list: Vec<String>,
-}
-
-impl Config {
-    pub fn read_config(path: &str) -> Result<Config, String> {
-        info!("Reading configuration from '{}'", path);
-        let mut file = File::open(&path).map_err(|e| format!("{:?}", e))?;
-        let mut config_toml = String::new();
-        file.read_to_string(&mut config_toml).map_err(|e| format!("{:?}", e))?;
-
-        deserialize_toml(&config_toml)
-    }
 }
 
 impl RepositoryConfiguration {
@@ -127,31 +107,10 @@ impl WatchReferences {
     }
 }
 
-fn deserialize_toml<T>(toml: &str) -> Result<T, String>
-    where T: Decodable
-{
-    let parsed_toml = toml::Parser::new(&toml).parse();
-    if let None = parsed_toml {
-        return Err("Error parsing TOML".to_string());
-    }
-
-    let table = toml::Value::Table(parsed_toml.unwrap());
-    Decodable::decode(&mut toml::Decoder::new(table)).map_err(|e| format!("{:?}", e))
-}
-
-fn serialize_toml<T>(obj: &T) -> Result<String, String>
-    where T: Encodable
-{
-    let mut encoder = toml::Encoder::new();
-    obj.encode(&mut encoder).map_err(|e| format!("{:?}", e))?;
-    Ok(toml::Value::Table(encoder.toml).to_string())
-}
-
 #[cfg(test)]
 mod tests {
     use tempdir::TempDir;
 
-    use Config;
     use git::Repository;
 
     #[test]
@@ -199,10 +158,5 @@ mod tests {
         let mut remote = not_err!(repo.remote(None));
 
         is_err!(config.resolve_target_ref(&mut remote));
-    }
-
-    #[test]
-    fn config_reading_smoke_test() {
-        not_err!(Config::read_config("tests/fixtures/config.toml"));
     }
 }

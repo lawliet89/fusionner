@@ -1,0 +1,8 @@
+[repository]
+uri = "https://github.com/lawliet89/fusionner.git"
+checkout_path = "target/test_repo"
+remote = "origin"
+fetch_refspecs = ["+refs/pull/*:refs/remotes/origin/pull/*"]
+notes_namespace = "fusionner-test"
+signature_name = "Foobar"
+signature_email = "foo@bar.xyz"

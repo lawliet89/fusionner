@@ -74,13 +74,13 @@ impl<'repo> Merger<'repo> {
         let note = self.repository.repository.find_note(Some(&notes_ref), oid)?;
         note.message()
             .ok_or(git_err!(&"Invalid message in note for oid"))
-            .and_then(|note| super::deserialize_toml(&note).map_err(|e| git_err!(&e)))
+            .and_then(|note| utils::deserialize_toml(&note).map_err(|e| git_err!(&e)))
     }
 
     /// Returns OID of note
     pub fn add_note(&self, note: &Note, oid: git2::Oid) -> Result<git2::Oid, git2::Error> {
         let signature = self.repository.signature()?;
-        let serialized_note = super::serialize_toml(&note).map_err(|e| git_err!(&e))?;
+        let serialized_note = utils::serialize_toml(&note).map_err(|e| git_err!(&e))?;
 
         self.repository.repository.note(&signature,
                                         &signature,

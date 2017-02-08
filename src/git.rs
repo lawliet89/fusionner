@@ -80,60 +80,74 @@ impl<'repo> Repository<'repo> {
         debug!("Making remote authentication callbacks");
         let mut remote_callbacks = git2::RemoteCallbacks::new();
         let repo_details = repo_details.clone();
-        remote_callbacks.credentials(move |_uri, username, cred_type| {
-                let username = username.or_else(|| match repo_details.username {
-                    Some(ref username) => Some(username),
-                    None => None,
-                });
-                if cred_type.intersects(git2::USERNAME) && username.is_some() {
-                    git2::Cred::username(username.as_ref().unwrap())
-                } else if cred_type.intersects(git2::USER_PASS_PLAINTEXT) && username.is_some() &&
-                          repo_details.password.is_some() {
-                    git2::Cred::userpass_plaintext(username.as_ref().unwrap(),
-                                                   repo_details.password.as_ref().unwrap())
-                } else if cred_type.intersects(git2::SSH_KEY) && username.is_some() {
-                    if repo_details.key.is_some() {
-                        git2::Cred::ssh_key(username.unwrap(),
-                                            None,
-                                            Path::new(repo_details.key.as_ref().unwrap()),
-                                            repo_details.key_passphrase.as_ref().map(|x| &**x))
-                    } else {
-                        git2::Cred::ssh_key_from_agent(username.unwrap())
-                    }
-
-                } else {
-                    let config = git2::Config::open_default()?;
-                    git2::Cred::credential_helper(&config, &repo_details.uri, username)
-                }
+        remote_callbacks.credentials(move |uri, username, cred_type| {
+                Repository::resolve_credentials(&repo_details, uri, username, cred_type)
             })
-            .transfer_progress(|progress| {
-                // TODO: Maybe throttle this, or update UI
-                if progress.received_objects() == progress.total_objects() {
-                    debug!("Resolving deltas {}/{}\r",
-                           progress.indexed_deltas(),
-                           progress.total_deltas());
-                } else if progress.total_objects() > 0 {
-                    debug!("Received {}/{} objects ({}) in {} bytes\r",
-                           progress.received_objects(),
-                           progress.total_objects(),
-                           progress.indexed_objects(),
-                           progress.received_bytes());
-                }
-                true
-            })
-            .sideband_progress(|data| {
-                debug!("remote: {}", str::from_utf8(data).unwrap_or(""));
-                true
-            })
-            .update_tips(|refname, a, b| {
-                if a.is_zero() {
-                    debug!("[new]     {:20} {}", b, refname);
-                } else {
-                    debug!("[updated] {:10}..{:10} {}", a, b, refname);
-                }
-                true
-            });
+            .transfer_progress(Repository::transfer_progress_log)
+            .sideband_progress(Repository::sideband_progress_log)
+            .update_tips(Repository::update_tips_log);
         remote_callbacks
+    }
+
+    pub fn resolve_credentials(repo_details: &RepositoryConfiguration,
+                               _uri: &str,
+                               username: Option<&str>,
+                               cred_type: git2::CredentialType)
+                               -> Result<git2::Cred, git2::Error> {
+        let username = username.or_else(|| match repo_details.username {
+            Some(ref username) => Some(username),
+            None => None,
+        });
+        if cred_type.intersects(git2::USERNAME) && username.is_some() {
+            git2::Cred::username(username.as_ref().unwrap())
+        } else if cred_type.intersects(git2::USER_PASS_PLAINTEXT) && username.is_some() &&
+                  repo_details.password.is_some() {
+            git2::Cred::userpass_plaintext(username.as_ref().unwrap(),
+                                           repo_details.password.as_ref().unwrap())
+        } else if cred_type.intersects(git2::SSH_KEY) && username.is_some() {
+            if repo_details.key.is_some() {
+                git2::Cred::ssh_key(username.unwrap(),
+                                    None,
+                                    Path::new(repo_details.key.as_ref().unwrap()),
+                                    repo_details.key_passphrase.as_ref().map(|x| &**x))
+            } else {
+                git2::Cred::ssh_key_from_agent(username.unwrap())
+            }
+
+        } else {
+            let config = git2::Config::open_default()?;
+            git2::Cred::credential_helper(&config, &repo_details.uri, username)
+        }
+    }
+
+    pub fn transfer_progress_log(progress: git2::Progress) -> bool {
+        // TODO: Maybe throttle this, or update UI
+        if progress.received_objects() == progress.total_objects() {
+            debug!("Resolving deltas {}/{}\r",
+                   progress.indexed_deltas(),
+                   progress.total_deltas());
+        } else if progress.total_objects() > 0 {
+            debug!("Received {}/{} objects ({}) in {} bytes\r",
+                   progress.received_objects(),
+                   progress.total_objects(),
+                   progress.indexed_objects(),
+                   progress.received_bytes());
+        }
+        true
+    }
+
+    pub fn sideband_progress_log(data: &[u8]) -> bool {
+        debug!("remote: {}", str::from_utf8(data).unwrap_or(""));
+        true
+    }
+
+    pub fn update_tips_log(refname: &str, a: git2::Oid, b: git2::Oid) -> bool {
+        if a.is_zero() {
+            debug!("[new]     {:20} {}", b, refname);
+        } else {
+            debug!("[updated] {:10}..{:10} {}", a, b, refname);
+        }
+        true
     }
 
     pub fn remote(&self, remote: Option<&str>) -> Result<Remote, git2::Error> {

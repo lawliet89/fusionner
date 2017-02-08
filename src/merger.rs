@@ -325,18 +325,45 @@ mod tests {
         let oid = head_oid(&repo);
         let branch_oid = add_branch_commit(&repo);
 
-        let (should_merge, note) = merger.should_merge(branch_oid, oid);
+        let (should_merge, found_note) = merger.should_merge(branch_oid, oid);
         assert!(should_merge);
-        assert!(note.is_none());
+        assert!(found_note.is_none());
     }
 
     #[test]
     fn should_merge_on_unequal_target_oid() {
+        let (td, _raw) = ::test::raw_repo_init();
+        let config = ::test::config_init(&td);
+        let repo = ::test::repo_init(&config);
+        let merger = not_err!(Merger::new(&repo, None, Some("foobar")));
 
+        let oid = head_oid(&repo);
+        let branch_oid = add_branch_commit(&repo);
+
+        let note = make_note(branch_oid);
+        not_err!(merger.add_note(&note, branch_oid));
+
+        let (should_merge, found_note) = merger.should_merge(branch_oid, oid);
+        assert!(should_merge);
+        assert_eq!(note, not_none!(found_note));
     }
 
     #[test]
     fn should_not_merge_on_equal_target_oid() {
+        let (td, _raw) = ::test::raw_repo_init();
+        let config = ::test::config_init(&td);
+        let repo = ::test::repo_init(&config);
+        let merger = not_err!(Merger::new(&repo, None, Some("foobar")));
 
+        let oid = head_oid(&repo);
+        let branch_oid = add_branch_commit(&repo);
+
+        let mut note = make_note(branch_oid);
+        note.target_parent_oid = format!("{}", oid);
+        not_err!(merger.add_note(&note, branch_oid));
+
+        let (should_merge, found_note) = merger.should_merge(branch_oid, oid);
+        assert!(!should_merge);
+        assert_eq!(note, not_none!(found_note));
     }
 }

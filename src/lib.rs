@@ -147,3 +147,57 @@ fn serialize_toml<T>(obj: &T) -> Result<String, String>
     obj.encode(&mut encoder).map_err(|e| format!("{:?}", e))?;
     Ok(toml::Value::Table(encoder.toml).to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use tempdir::TempDir;
+
+    use git::Repository;
+
+    #[test]
+    fn target_ref_is_resolved_to_head_by_default() {
+        let (td, _raw) = ::test::raw_repo_init();
+        let mut config = ::test::config_init(&td);
+        config.target_ref = None;
+
+        let td_new = TempDir::new("test").unwrap();
+        config.checkout_path = not_none!(td_new.path().to_str()).to_string();
+
+        let repo = not_err!(Repository::clone_or_open(&config));
+        let mut remote = not_err!(repo.remote(None));
+
+        let target_ref = not_err!(config.resolve_target_ref(&mut remote));
+        assert_eq!("refs/heads/master", target_ref);
+    }
+
+    #[test]
+    fn target_ref_is_resolved_correctly() {
+        let (td, _raw) = ::test::raw_repo_init();
+        let mut config = ::test::config_init(&td);
+        config.target_ref = Some("refs/heads/master".to_string());
+
+        let td_new = TempDir::new("test").unwrap();
+        config.checkout_path = not_none!(td_new.path().to_str()).to_string();
+
+        let repo = not_err!(Repository::clone_or_open(&config));
+        let mut remote = not_err!(repo.remote(None));
+
+        let target_ref = not_err!(config.resolve_target_ref(&mut remote));
+        assert_eq!("refs/heads/master", target_ref);
+    }
+
+    #[test]
+    fn invalid_target_ref_should_error() {
+        let (td, _raw) = ::test::raw_repo_init();
+        let mut config = ::test::config_init(&td);
+        config.target_ref = Some("refs/heads/unknown".to_string());
+
+        let td_new = TempDir::new("test").unwrap();
+        config.checkout_path = not_none!(td_new.path().to_str()).to_string();
+
+        let repo = not_err!(Repository::clone_or_open(&config));
+        let mut remote = not_err!(repo.remote(None));
+
+        is_err!(config.resolve_target_ref(&mut remote));
+    }
+}

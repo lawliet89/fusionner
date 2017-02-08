@@ -11,6 +11,13 @@ macro_rules! not_err {
     })
 }
 
+macro_rules! is_err {
+    ($e:expr) => (match $e {
+        Ok(e) => panic!("{} did not return with an error, but with {}", stringify!($e), e),
+        Err(e) => e,
+    })
+}
+
 macro_rules! not_none {
     ($e:expr) => (match $e {
         Some(e) => e,

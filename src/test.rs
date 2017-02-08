@@ -30,8 +30,8 @@ pub fn raw_repo_init() -> (TempDir, git2::Repository) {
 
         let tree = repo.find_tree(id).unwrap();
         let sig = repo.signature().unwrap();
-        repo.commit(Some("HEAD"), &sig, &sig, "initial",
-                    &tree, &[]).unwrap();
+        repo.commit(Some("HEAD"), &sig, &sig, "initial", &tree, &[])
+            .unwrap();
 
         repo.remote("origin", &path2url(&td.path())).unwrap();
     }
@@ -54,7 +54,7 @@ pub fn config_init(tempdir: &TempDir) -> ::RepositoryConfiguration {
         merge_ref: None,
         target_ref: None,
         signature_name: None,
-        signature_email: None
+        signature_email: None,
     }
 }
 

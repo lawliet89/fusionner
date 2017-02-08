@@ -175,8 +175,8 @@ impl<'repo> Repository<'repo> {
 }
 
 impl<'repo> Remote<'repo> {
-    pub fn connect<'connection>(&'connection mut self)
-                                -> Result<git2::RemoteConnection<'repo, 'connection, 'connection>, git2::Error> {
+    fn connect<'connection>(&'connection mut self)
+                            -> Result<git2::RemoteConnection<'repo, 'connection, 'connection>, git2::Error> {
         let callbacks = Repository::remote_callbacks(self.repository.details);
         info!("Connecting to remote");
         self.remote.connect(git2::Direction::Fetch, Some(callbacks), None)
@@ -248,7 +248,7 @@ impl<'repo> Remote<'repo> {
     }
 
     /// For a given local reference, generate a refspec for the remote with the same path on remote
-    /// i.e. refs/pulls/*  --> refs/pulls/*:refs/remote/origin/pulls/*
+    /// i.e. refs/pulls/*  --> refs/pulls/*:refs/remotes/origin/pulls/*
     pub fn generate_refspec(&self, src: &str, force: bool) -> Result<String, String> {
         let parts: Vec<&str> = src.split('/').collect();
         if parts[0] != "refs" {
@@ -271,16 +271,16 @@ impl<'repo> Remote<'repo> {
             match direction {
                 git2::Direction::Fetch => {
                     info!("No existing fetch refpec found: adding {}", refspec);
-                    self.repository.repository.remote_add_fetch(remote_name, &refspec)?;
+                    self.repository.repository.remote_add_fetch(remote_name, &refspec)
                 }
                 git2::Direction::Push => {
                     info!("No existing push refpec found: adding {}", refspec);
-                    self.repository.repository.remote_add_push(remote_name, &refspec)?;
+                    self.repository.repository.remote_add_push(remote_name, &refspec)
                 }
             }
+        } else {
+            Ok(())
         }
-
-        Ok(())
     }
 
     pub fn add_refspecs(&self, refspecs: &[&str], direction: git2::Direction) -> Result<(), git2::Error> {
@@ -290,10 +290,10 @@ impl<'repo> Remote<'repo> {
         Ok(())
     }
 
-    fn find_matching_refspec<'a>(mut refspecs: git2::Refspecs<'a>,
-                                 direction: git2::Direction,
-                                 refspec: &str)
-                                 -> Option<git2::Refspec<'a>> {
+    pub fn find_matching_refspec<'a>(mut refspecs: git2::Refspecs<'a>,
+                                     direction: git2::Direction,
+                                     refspec: &str)
+                                     -> Option<git2::Refspec<'a>> {
         refspecs.find(|r| {
             let rs = r.str();
             Remote::direction_eq(&r.direction(), &direction) && rs.is_some() && rs.unwrap() == refspec
@@ -314,11 +314,12 @@ impl<'repo> Remote<'repo> {
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
+    use std::vec::Vec;
 
     use git2;
     use git2_raw;
     use tempdir::TempDir;
-    use git::Repository;
+    use git::{Repository, Remote};
 
     #[test]
     fn smoke_test_opem() {
@@ -368,5 +369,72 @@ mod tests {
 
         let actual_cred = not_err!(Repository::resolve_credentials(&config, "", None, requested_cred_type));
         assert_eq!(expected_cred_type, actual_cred.credtype());
+    }
+
+    #[test]
+    fn remote_smoke_test() {
+        let (td, _raw) = ::test::raw_repo_init();
+        let mut config = ::test::config_init(&td);
+        let td_new = TempDir::new("test").unwrap();
+        config.checkout_path = not_none!(td_new.path().to_str()).to_string();
+        let repo = not_err!(Repository::clone_or_open(&config));
+        let mut remote = not_err!(repo.remote(None));
+
+        assert_eq!("origin", not_none!(remote.name()));
+        not_err!(remote.remote_ls());
+        not_none!(not_err!(remote.head()));
+        not_err!(remote.fetch(&[]));
+    }
+
+    #[test]
+    fn refspecs_are_generated_correctly() {
+        let (td, _raw) = ::test::raw_repo_init();
+        let config = ::test::config_init(&td);
+        let repo = ::test::repo_init(&config);
+
+        let remote = not_err!(repo.remote(None));
+
+        for force in [true, false].iter() {
+            let force_flag = if *force { "+" } else { "" };
+            let expected_refspec = format!("{}{}",
+                                           force_flag,
+                                           "refs/pulls/*:refs/remotes/origin/pulls/*");
+            assert_eq!(expected_refspec,
+                       not_err!(remote.generate_refspec("refs/pulls/*", *force)));
+        }
+    }
+
+    #[test]
+    fn refspecs_smoke_test() {
+        let (td, _raw) = ::test::raw_repo_init();
+        let config = ::test::config_init(&td);
+        let repo = ::test::repo_init(&config);
+
+        let remote = not_err!(repo.remote(None));
+        let refspec = not_err!(remote.generate_refspec("refs/pulls/*", true));
+
+        not_err!(remote.add_refspec(&refspec, git2::Direction::Push));
+        not_err!(remote.add_refspec(&refspec, git2::Direction::Fetch));
+
+        let remote = not_err!(repo.remote(None)); // new remote object with "refreshed" refspecs
+        for refspec in remote.refspecs() {
+            println!("{}", refspec.str().unwrap());
+        }
+
+        not_none!(Remote::find_matching_refspec(remote.refspecs(), git2::Direction::Push, &refspec));
+        not_none!(Remote::find_matching_refspec(remote.refspecs(), git2::Direction::Fetch, &refspec));
+    }
+
+    #[test]
+    fn directions_are_eq_correctly() {
+        let test_values: Vec<(git2::Direction, git2::Direction, bool)> =
+            vec![(git2::Direction::Fetch, git2::Direction::Fetch, true),
+                 (git2::Direction::Push, git2::Direction::Push, true),
+                 (git2::Direction::Push, git2::Direction::Fetch, false),
+                 (git2::Direction::Fetch, git2::Direction::Push, false)];
+
+        for (left, right, expected_result) in test_values {
+            assert_eq!(expected_result, Remote::direction_eq(&left, &right));
+        }
     }
 }

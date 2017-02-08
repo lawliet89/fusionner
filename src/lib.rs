@@ -46,7 +46,6 @@ pub struct RepositoryConfiguration {
     pub key: Option<String>,
     pub key_passphrase: Option<String>,
     // Matching settings
-    pub merge_ref: Option<String>,
     pub target_ref: Option<String>, // TODO: Support specifying branch name instead of references
     // Signature settings
     pub signature_name: Option<String>,
@@ -152,6 +151,7 @@ fn serialize_toml<T>(obj: &T) -> Result<String, String>
 mod tests {
     use tempdir::TempDir;
 
+    use Config;
     use git::Repository;
 
     #[test]
@@ -199,5 +199,10 @@ mod tests {
         let mut remote = not_err!(repo.remote(None));
 
         is_err!(config.resolve_target_ref(&mut remote));
+    }
+
+    #[test]
+    fn config_reading_smoke_test() {
+        not_err!(Config::read_config("tests/fixtures/config.toml"));
     }
 }

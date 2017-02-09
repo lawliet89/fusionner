@@ -1,5 +1,9 @@
 # fusionner
 
+![Build Badge](https://travis-ci.org/lawliet89/fusionner.svg?branch=master)
+
+[Documentation](https://lawliet89.github.io/fusionner/)
+
 `fusionner` is French for merge. This tool exists to create merge commits between your watched topic branches
 and your target default branch.
 

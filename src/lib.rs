@@ -3,6 +3,8 @@ extern crate libgit2_sys as git2_raw;
 #[macro_use]
 extern crate log;
 extern crate regex;
+#[cfg(test)]
+extern crate rand;
 extern crate rustc_serialize;
 extern crate toml;
 #[cfg(test)]

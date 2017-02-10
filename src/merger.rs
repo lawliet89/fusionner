@@ -308,28 +308,82 @@ fn index_in_conflict(entries: &mut git2::IndexEntries) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use merger::{Merger, Note, Merge};
+    use std::fs::File;
+    use std::io::Write;
+    use std::path::Path;
+
     use git;
     use git2;
+    use rand;
+    use rand::Rng;
+
+    use merger::{Merger, Note, Merge, ShouldMergeResult};
 
     fn head_oid(repo: &git::Repository) -> git2::Oid {
         let reference = not_err!(repo.repository.head());
         not_none!(reference.target())
     }
 
-    fn make_note(oid: git2::Oid) -> Note {
-        let merge = Merge::new(oid, oid, &[oid], "refs/fusionner/some-merge");
-        Note::new_with_merge("refs/heads/master", merge)
+    fn make_merge(oid: git2::Oid, target_oid: git2::Oid, target_reference: &str) -> Merge {
+        Merge::new(oid,
+                   target_oid,
+                   target_reference,
+                   &[],
+                   "refs/fusionner/some-merge")
+    }
+
+    fn make_note(oid: git2::Oid, target_oid: git2::Oid, target_reference: &str) -> Note {
+        let merge = make_merge(oid, target_oid, target_reference);
+        Note::new_with_merge(merge)
     }
 
     fn add_branch_commit(repo: &git::Repository) -> git2::Oid {
+        add_branch_commit_with_reference(repo, "refs/heads/branch")
+    }
+
+    fn add_branch_commit_with_reference(repo: &git::Repository, reference: &str) -> git2::Oid {
         let repo = &repo.repository;
+        let mut parent_commit = vec![];
+
+        // Checkout tree if it exists
+        let resolved_reference = repo.find_reference(reference);
+        if let Ok(resolved_reference) = resolved_reference {
+            let resolved_reference = resolved_reference.resolve().unwrap();
+            let oid = resolved_reference.target().unwrap();
+            let commit = repo.find_commit(oid).unwrap();
+            let tree = commit.tree().unwrap();
+
+            let mut checkout_builder = git2::build::CheckoutBuilder::new();
+            checkout_builder.force();
+
+            repo.checkout_tree(tree.as_object(), Some(&mut checkout_builder)).unwrap();
+            parent_commit.push(commit);
+        }
+
         let mut index = repo.index().unwrap();
-        let id = index.write_tree().unwrap();
+        let workdir = repo.workdir().unwrap();
+        let random_string = rand::thread_rng()
+            .gen_ascii_chars()
+            .take(10)
+            .collect::<String>();
+        let file = workdir.join(&random_string);
+        println!("{:?}", file);
+
+        {
+            let mut random_file = File::create(&file).unwrap();
+            random_file.write_all(random_string.as_bytes()).unwrap();
+        }
+        // Add file to index
+        index.add_path(Path::new(&random_string)).unwrap();
+
+        let id = index.write_tree_to(repo).unwrap();
 
         let tree = repo.find_tree(id).unwrap();
         let sig = repo.signature().unwrap();
-        repo.commit(Some("refs/heads/branch"), &sig, &sig, "branch", &tree, &[])
+
+        let parents: Vec<&git2::Commit> = parent_commit.iter().map(|c| c).collect();
+
+        repo.commit(Some(reference), &sig, &sig, "branch", &tree, &parents)
             .unwrap()
     }
 
@@ -392,24 +446,25 @@ mod tests {
 
         let oid = head_oid(&repo);
         let branch_oid = add_branch_commit(&repo);
+        let reference = "refs/heads/branch";
+        let target_reference = "refs/heads/master";
 
-        let (should_merge, found_note) = merger.should_merge(branch_oid, oid);
-        assert!(should_merge);
-        assert!(found_note.is_none());
+        let should_merge = merger.should_merge(branch_oid, oid, reference, target_reference);
+        assert_matches!(should_merge, ShouldMergeResult::Merge(None));
 
         // First merge completes successfully
-        not_err!(merger.merge(branch_oid, oid, "some-branch", ""));
+        not_err!(merger.merge(branch_oid, oid, reference, target_reference));
 
         // Second merge to the same reference should not fail
-        let note = not_err!(merger.merge(branch_oid, oid, "some-branch", ""));
+        let merge = not_err!(merger.merge(branch_oid, oid, reference, target_reference));
 
+        let note = Note::new_with_merge(merge);
         // We can add the note to the repository
         not_err!(merger.add_note(&note, branch_oid));
 
         // And we should not meed to merge again
-        let (should_merge, found_note) = merger.should_merge(branch_oid, oid);
-        assert!(!should_merge);
-        assert_eq!(note, not_none!(found_note));
+        let should_merge = merger.should_merge(branch_oid, oid, reference, target_reference);
+        assert_matches!(should_merge, ShouldMergeResult::ExistingMergeInSameTargetReference{..})
     }
 
     #[test]
@@ -420,7 +475,7 @@ mod tests {
         let merger = not_err!(Merger::new(&repo, None, Some("foobar")));
         let oid = head_oid(&repo);
 
-        let note = make_note(oid);
+        let note = make_note(oid, oid, "refs/heads/master");
         not_err!(merger.add_note(&note, oid));
 
         let found_note = not_err!(merger.find_note(oid));
@@ -437,14 +492,15 @@ mod tests {
 
         let oid = head_oid(&repo);
         let branch_oid = add_branch_commit(&repo);
+        let reference = "refs/heads/branch";
+        let target_reference = "refs/heads/master";
 
-        let (should_merge, found_note) = merger.should_merge(branch_oid, oid);
-        assert!(should_merge);
-        assert!(found_note.is_none());
+        let should_merge = merger.should_merge(branch_oid, oid, reference, target_reference);
+        assert_matches!(should_merge, ShouldMergeResult::Merge(None));
     }
 
     #[test]
-    fn should_merge_on_unequal_target_oid() {
+    fn should_not_merge_on_equal_target_oid_for_same_target_reference() {
         let (td, _raw) = ::test::raw_repo_init();
         let config = ::test::config_init(&td);
         let repo = ::test::repo_init(&config);
@@ -452,17 +508,18 @@ mod tests {
 
         let oid = head_oid(&repo);
         let branch_oid = add_branch_commit(&repo);
+        let reference = "refs/heads/branch";
+        let target_reference = "refs/heads/master";
 
-        let note = make_note(branch_oid);
+        let note = make_note(branch_oid, oid, target_reference);
         not_err!(merger.add_note(&note, branch_oid));
 
-        let (should_merge, found_note) = merger.should_merge(branch_oid, oid);
-        assert!(should_merge);
-        assert_eq!(note, not_none!(found_note));
+        let should_merge = merger.should_merge(branch_oid, oid, reference, target_reference);
+        assert_matches!(should_merge, ShouldMergeResult::ExistingMergeInSameTargetReference{ .. });
     }
 
     #[test]
-    fn should_not_merge_on_equal_target_oid() {
+    fn should_merge_on_unequal_target_oid_for_same_target_reference() {
         let (td, _raw) = ::test::raw_repo_init();
         let config = ::test::config_init(&td);
         let repo = ::test::repo_init(&config);
@@ -470,16 +527,60 @@ mod tests {
 
         let oid = head_oid(&repo);
         let branch_oid = add_branch_commit(&repo);
+        let reference = "refs/heads/branch";
+        let target_reference = "refs/heads/master";
 
-        let mut note = make_note(branch_oid);
-        note.target_parent_oid = format!("{}", oid);
+        let note = make_note(branch_oid, oid, target_reference);
         not_err!(merger.add_note(&note, branch_oid));
 
-        let (should_merge, found_note) = merger.should_merge(branch_oid, oid);
-        assert!(!should_merge);
-        assert_eq!(note, not_none!(found_note));
+        let new_branch_oid = add_branch_commit_with_reference(&repo, reference);
+
+        assert!(branch_oid != new_branch_oid);
+
+        let should_merge = merger.should_merge(new_branch_oid, oid, reference, target_reference);
+        assert_matches!(should_merge, ShouldMergeResult::Merge(None));
     }
 
     #[test]
-    fn notes_only_has_latest_merge_for_target_reference() {}
+    fn should_not_merge_on_equal_target_oid_for_different_target_reference() {
+        let (td, _raw) = ::test::raw_repo_init();
+        let config = ::test::config_init(&td);
+        let repo = ::test::repo_init(&config);
+        let merger = not_err!(Merger::new(&repo, None, Some("foobar")));
+
+        let oid = head_oid(&repo);
+        let branch_oid = add_branch_commit(&repo);
+        let reference = "refs/heads/branch";
+        let target_reference = "refs/heads/master";
+
+        let note = make_note(branch_oid, oid, target_reference);
+        not_err!(merger.add_note(&note, branch_oid));
+
+        let new_target_reference = "refs/heads/develop";
+        let should_merge = merger.should_merge(branch_oid, oid, reference, new_target_reference);
+        assert_matches!(should_merge, ShouldMergeResult::ExistingMergeInDifferentTargetReference{ .. });
+    }
+
+
+    #[test]
+    fn notes_only_has_latest_merge_for_target_reference() {
+        let (td, _raw) = ::test::raw_repo_init();
+        let config = ::test::config_init(&td);
+        let repo = ::test::repo_init(&config);
+
+        let oid = head_oid(&repo);
+        let branch_oid = add_branch_commit(&repo);
+        let _reference = "refs/heads/branch";
+        let target_reference = "refs/heads/master";
+
+        let mut note = make_note(branch_oid, oid, target_reference);
+
+        let new_target_oid = add_branch_commit_with_reference(&repo, target_reference);
+        let merge = make_merge(oid, new_target_oid, target_reference);
+        let old_merge = not_none!(note.append_with_merge(merge));
+
+        assert_eq!(format!("{}", oid), old_merge.target_parent_oid);
+    }
+
+
 }

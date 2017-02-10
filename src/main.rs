@@ -231,10 +231,18 @@ fn process_loop(remote: &mut git::Remote,
         }
 
         info!("Performing merge");
-        let merged_note = merger.merge(oid, target_oid, &reference, target_ref)?;
+        let merge = merger.merge(oid, target_oid, &reference, target_ref)?;
 
-        info!("Adding note: {:?}", merged_note);
-        merger.add_note(&merged_note, oid)?;
+        let note = match note {
+            None => merger::Note::new_with_merge(target_ref, merge),
+            Some(mut note) => {
+                note.append_with_merge(target_ref, merge);
+                note
+            }
+        };
+
+        info!("Adding note: {:?}", note);
+        merger.add_note(&note, oid)?;
     }
     info!("Pushing to remote");
     merger.push()?;

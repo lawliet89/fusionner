@@ -218,31 +218,40 @@ fn process_loop(remote: &mut git::Remote,
     merger.fetch_notes(utils::as_str_slice(&commits).as_slice())?;
 
     for (reference, oid) in oids {
-        let (should_merge, note) = merger.should_merge(oid, target_oid);
-        info!("Merging {} ({} into {})?: {}",
+        let should_merge = merger.should_merge(oid, target_oid, &reference, target_ref);
+        info!("Merging {} ({} into {})?: {:?}",
               reference,
               oid,
               target_oid,
               should_merge);
-        debug!("Note found: {:?}", note);
-        if !should_merge {
-            info!("Merge commit is up to date");
-            continue;
-        }
 
-        info!("Performing merge");
-        let merge = merger.merge(oid, target_oid, &reference, target_ref)?;
+        match should_merge {
+            merger::ShouldMergeResult::Merge(note) => {
+                info!("Performing merge");
+                let merge = merger.merge(oid, target_oid, &reference, target_ref)?;
 
-        let note = match note {
-            None => merger::Note::new_with_merge(target_ref, merge),
-            Some(mut note) => {
-                note.append_with_merge(target_ref, merge);
-                note
+                let note = match note {
+                    None => merger::Note::new_with_merge(merge),
+                    Some(mut note) => {
+                        note.append_with_merge(merge);
+                        note
+                    }
+                };
+
+                info!("Adding note: {:?}", note);
+                merger.add_note(&note, oid)?;
+            }
+            merger::ShouldMergeResult::ExistingMergeInSameTargetReference(_) => {
+                info!("Merge commit is up to date");
+            }
+            merger::ShouldMergeResult::ExistingMergeInDifferentTargetReference { mut note, merges, proposed_merge } => {
+                info!("Merge found under other target references: {:?}", merges);
+                note.append_with_merge(proposed_merge);
+                info!("Adding note: {:?}", note);
+                merger.add_note(&note, oid)?;
             }
         };
 
-        info!("Adding note: {:?}", note);
-        merger.add_note(&note, oid)?;
     }
     info!("Pushing to remote");
     merger.push()?;

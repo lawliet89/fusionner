@@ -1,4 +1,4 @@
-use std::path::{Path};
+use std::path::Path;
 use tempdir::TempDir;
 use url::Url;
 

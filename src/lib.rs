@@ -54,9 +54,6 @@ pub struct RepositoryConfiguration {
     pub key: Option<String>,
     /// Passphrase to the private key for authentication
     pub key_passphrase: Option<String>,
-    /// The reference to the "default" branch to create merge commits against
-    /// This defaults to the rempte's HEAD, usually refs/heads/master
-    pub target_ref: Option<String>, // TODO: Support specifying branch name instead of references
     /// The name to create merge commits under.
     /// If unspecified, will use the global configuration in Git. Otherwise we will use some generic one
     pub signature_name: Option<String>,
@@ -70,30 +67,6 @@ pub struct RepositoryConfiguration {
 pub struct WatchReferences {
     regex_set: RegexSet,
     exact_list: Vec<String>,
-}
-
-impl RepositoryConfiguration {
-    pub fn resolve_target_ref(&self, remote: &mut git::Remote) -> Result<String, git2::Error> {
-        match self.target_ref {
-            Some(ref reference) => {
-                info!("Target Reference Specified: {}", reference);
-                let remote_refs = remote.remote_ls()?;
-                if let None = remote_refs.iter().find(|head| &head.name == reference) {
-                    return Err(git_err!(&format!("Could not find {} on remote", reference)));
-                }
-                Ok(reference.to_string())
-            }
-            None => {
-                let head = remote.head()?;
-                if let None = head {
-                    return Err(git_err!("Could not find a default HEAD on remote"));
-                }
-                let head = head.unwrap();
-                info!("Target Reference set to remote HEAD: {}", head);
-                Ok(head)
-            }
-        }
-    }
 }
 
 impl WatchReferences {
@@ -139,7 +112,6 @@ mod tests {
     fn target_ref_is_resolved_to_head_by_default() {
         let (td, _raw) = ::test::raw_repo_init();
         let mut config = ::test::config_init(&td);
-        config.target_ref = None;
 
         let td_new = TempDir::new("test").unwrap();
         config.checkout_path = not_none!(td_new.path().to_str()).to_string();
@@ -147,7 +119,7 @@ mod tests {
         let repo = not_err!(Repository::clone_or_open(&config));
         let mut remote = not_err!(repo.remote(None));
 
-        let target_ref = not_err!(config.resolve_target_ref(&mut remote));
+        let target_ref = not_err!(remote.resolve_target_ref(&None));
         assert_eq!("refs/heads/master", target_ref);
     }
 
@@ -155,7 +127,7 @@ mod tests {
     fn target_ref_is_resolved_correctly() {
         let (td, _raw) = ::test::raw_repo_init();
         let mut config = ::test::config_init(&td);
-        config.target_ref = Some("refs/heads/master".to_string());
+        let target_ref = Some("refs/heads/master".to_string());
 
         let td_new = TempDir::new("test").unwrap();
         config.checkout_path = not_none!(td_new.path().to_str()).to_string();
@@ -163,7 +135,7 @@ mod tests {
         let repo = not_err!(Repository::clone_or_open(&config));
         let mut remote = not_err!(repo.remote(None));
 
-        let target_ref = not_err!(config.resolve_target_ref(&mut remote));
+        let target_ref = not_err!(remote.resolve_target_ref(&target_ref));
         assert_eq!("refs/heads/master", target_ref);
     }
 
@@ -171,7 +143,7 @@ mod tests {
     fn invalid_target_ref_should_error() {
         let (td, _raw) = ::test::raw_repo_init();
         let mut config = ::test::config_init(&td);
-        config.target_ref = Some("refs/heads/unknown".to_string());
+        let target_ref = Some("refs/heads/unknown".to_string());
 
         let td_new = TempDir::new("test").unwrap();
         config.checkout_path = not_none!(td_new.path().to_str()).to_string();
@@ -179,6 +151,6 @@ mod tests {
         let repo = not_err!(Repository::clone_or_open(&config));
         let mut remote = not_err!(repo.remote(None));
 
-        is_err!(config.resolve_target_ref(&mut remote));
+        is_err!(remote.resolve_target_ref(&target_ref));
     }
 }

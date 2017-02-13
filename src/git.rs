@@ -290,6 +290,28 @@ impl<'repo> Remote<'repo> {
         Ok(())
     }
 
+    pub fn resolve_target_ref(&mut self, target_ref: &Option<String>) -> Result<String, git2::Error> {
+        match target_ref {
+            &Some(ref reference) => {
+                info!("Target Reference Specified: {}", reference);
+                let remote_refs = self.remote_ls()?;
+                if let None = remote_refs.iter().find(|head| &head.name == reference) {
+                    return Err(git_err!(&format!("Could not find {} on remote", reference)));
+                }
+                Ok(reference.to_string())
+            }
+            &None => {
+                let head = self.head()?;
+                if let None = head {
+                    return Err(git_err!("Could not find a default HEAD on remote"));
+                }
+                let head = head.unwrap();
+                info!("Target Reference set to remote HEAD: {}", head);
+                Ok(head)
+            }
+        }
+    }
+
     pub fn find_matching_refspec<'a>(mut refspecs: git2::Refspecs<'a>,
                                      direction: git2::Direction,
                                      refspec: &str)

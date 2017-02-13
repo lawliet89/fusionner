@@ -75,7 +75,6 @@ pub fn config_init(tempdir: &TempDir) -> ::RepositoryConfiguration {
         password: Some("password".to_string()),
         key: Some("/path/to/some.key".to_string()),
         key_passphrase: None,
-        target_ref: None,
         signature_name: None,
         signature_email: None,
     }

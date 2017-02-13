@@ -47,6 +47,12 @@ pub struct Merge {
 }
 
 // TODO: Allow customizing of this, but only in code
+/// The default namer will create a reference at `refs/fusionner/{reference}/{target}`
+/// where `{target}` is the target reference, and `{reference}~ is the reference that is being
+/// merged into target.
+///
+/// _Note: The namer will strip everything until the last `/` so make sure you don't use `/` in your
+/// branch names to avoid collision._
 pub enum MergeReferenceNamer {
     Default,
 }
@@ -269,12 +275,13 @@ impl Merge {
 }
 
 impl MergeReferenceNamer {
-    pub fn resolve(&self, reference: &str, _target_reference: &str, _oid: git2::Oid, _target_oid: git2::Oid) -> String {
+    pub fn resolve(&self, reference: &str, target_reference: &str, _oid: git2::Oid, _target_oid: git2::Oid) -> String {
         match self {
             &MergeReferenceNamer::Default => {
-                format!("{}/{}",
+                format!("{}/{}/{}",
                         DEFAULT_NERGE_REFERENCE_BASE,
-                        reference.replace("refs/", ""))
+                        Self::reference_last_item(reference),
+                        Self::reference_last_item(target_reference))
             }
         }
     }
@@ -287,6 +294,10 @@ impl MergeReferenceNamer {
         let src = MergeReferenceNamer::Default.reference();
         let refspec = remote.generate_refspec(&src, true).map_err(|e| git_err!(&e))?;
         remote.add_refspec(&refspec, git2::Direction::Push)
+    }
+
+    fn reference_last_item(reference: &str) -> String {
+        reference.split('/').last().or(Some("")).map(|s| s.to_string()).unwrap()
     }
 }
 
@@ -317,7 +328,7 @@ mod tests {
     use rand;
     use rand::Rng;
 
-    use merger::{Merger, Note, Merge, ShouldMergeResult};
+    use merger::{Merger, Note, Merge, ShouldMergeResult, MergeReferenceNamer};
 
     fn head_oid(repo: &git::Repository) -> git2::Oid {
         let reference = not_err!(repo.repository.head());
@@ -582,5 +593,16 @@ mod tests {
         assert_eq!(format!("{}", oid), old_merge.target_parent_oid);
     }
 
+    #[test]
+    fn correct_default_merge_reference_is_returned() {
+        let (td, _raw) = ::test::raw_repo_init();
+        let config = ::test::config_init(&td);
+        let repo = ::test::repo_init(&config);
 
+        let oid = head_oid(&repo);
+
+        let expected = "refs/fusionner/some-branch/master";
+        let actual = MergeReferenceNamer::Default.resolve("refs/heads/some-branch", "refs/heads/master", oid, oid);
+        assert_eq!(expected, actual);
+    }
 }

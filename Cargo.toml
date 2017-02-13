@@ -29,5 +29,6 @@ time = "0.1"
 toml = "0.2"
 
 [dev-dependencies]
+rand = "0.3"
 tempdir = "0.3"
 url = "1.0"

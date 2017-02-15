@@ -10,11 +10,11 @@ static DEFAULT_NERGE_REFERENCE_BASE: &'static str = "refs/fusionner";
 const NOTE_VERSION: u8 = 1;
 static NOTE_ID: &'static str = "fusionner <https://github.com/lawliet89/fusionner>";
 
-pub struct Merger<'repo> {
+pub struct Merger<'repo, 'cb> {
     repository: &'repo Repository<'repo>,
     remote: Remote<'repo>,
     namespace: String,
-    merge_reference_namer: MergeReferenceNamer,
+    merge_reference_namer: MergeReferenceNamer<'cb>,
 }
 
 type Merges = HashMap<String, Merge>;
@@ -46,6 +46,9 @@ pub struct Merge {
     pub merge_reference: String,
 }
 
+/// Fn(reference: &str, target_reference: &str, oid: git2::Oid, target_oid: git2::Oid) -> String
+type MergeReferenceNamerCallback<'a> = Fn(&str, &str, git2::Oid, git2::Oid) -> String + 'a;
+
 // TODO: Allow customizing of this, but only in code
 /// The default namer will create a reference at `refs/fusionner/{reference}/{target}`
 /// where `{target}` is the target reference, and `{reference}~ is the reference that is being
@@ -53,8 +56,9 @@ pub struct Merge {
 ///
 /// _Note: The namer will strip everything until the last `/` so make sure you don't use `/` in your
 /// branch names to avoid collision._
-pub enum MergeReferenceNamer {
+pub enum MergeReferenceNamer<'cb> {
     Default,
+    Custom(Box<MergeReferenceNamerCallback<'cb>>),
 }
 
 
@@ -70,17 +74,18 @@ pub enum ShouldMergeResult {
     },
 }
 
-impl<'repo> Merger<'repo> {
+impl<'repo, 'cb> Merger<'repo, 'cb> {
     pub fn new(repository: &'repo Repository<'repo>,
                remote: Option<&str>,
-               namespace: Option<&str>)
-               -> Result<Merger<'repo>, git2::Error> {
+               namespace: Option<&str>,
+               merge_reference_namer: Option<MergeReferenceNamer<'cb>>)
+               -> Result<Merger<'repo, 'cb>, git2::Error> {
         let remote = repository.remote(remote)?;
         Ok(Merger {
             repository: repository,
             remote: remote,
             namespace: namespace.or(Some(DEFAULT_NOTES_NAMESPACE)).unwrap().to_string(),
-            merge_reference_namer: MergeReferenceNamer::Default,
+            merge_reference_namer: merge_reference_namer.or(Some(MergeReferenceNamer::Default)).unwrap(),
         })
     }
 
@@ -274,8 +279,8 @@ impl Merge {
     }
 }
 
-impl MergeReferenceNamer {
-    pub fn resolve(&self, reference: &str, target_reference: &str, _oid: git2::Oid, _target_oid: git2::Oid) -> String {
+impl<'cb> MergeReferenceNamer<'cb> {
+    pub fn resolve(&self, reference: &str, target_reference: &str, oid: git2::Oid, target_oid: git2::Oid) -> String {
         match self {
             &MergeReferenceNamer::Default => {
                 format!("{}/{}/{}",
@@ -283,6 +288,7 @@ impl MergeReferenceNamer {
                         Self::reference_last_item(reference),
                         Self::reference_last_item(target_reference))
             }
+            &MergeReferenceNamer::Custom(ref cb) => cb(reference, target_reference, oid, target_oid),
         }
     }
 
@@ -319,6 +325,7 @@ fn index_in_conflict(entries: &mut git2::IndexEntries) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use std::cell::Cell;
     use std::fs::File;
     use std::io::Write;
     use std::path::Path;
@@ -403,7 +410,7 @@ mod tests {
         let (td, _raw) = ::test::raw_repo_init();
         let config = ::test::config_init(&td);
         let repo = ::test::repo_init(&config);
-        let merger = not_err!(Merger::new(&repo, None, None));
+        let merger = not_err!(Merger::new(&repo, None, None, None));
         not_err!(merger.add_note_refspecs());
 
         let remote = repo.remote(None).unwrap();
@@ -428,7 +435,7 @@ mod tests {
         let (td, _raw) = ::test::raw_repo_init();
         let config = ::test::config_init(&td);
         let repo = ::test::repo_init(&config);
-        let merger = not_err!(Merger::new(&repo, None, Some("foobar")));
+        let merger = not_err!(Merger::new(&repo, None, Some("foobar"), None));
         not_err!(merger.add_note_refspecs());
 
         let remote = repo.remote(None).unwrap();
@@ -453,7 +460,7 @@ mod tests {
         let (td, _raw) = ::test::raw_repo_init();
         let config = ::test::config_init(&td);
         let repo = ::test::repo_init(&config);
-        let merger = not_err!(Merger::new(&repo, None, Some("foobar")));
+        let merger = not_err!(Merger::new(&repo, None, Some("foobar"), None));
 
         let oid = head_oid(&repo);
         let branch_oid = add_branch_commit(&repo);
@@ -483,7 +490,7 @@ mod tests {
         let (td, _raw) = ::test::raw_repo_init();
         let config = ::test::config_init(&td);
         let repo = ::test::repo_init(&config);
-        let merger = not_err!(Merger::new(&repo, None, Some("foobar")));
+        let merger = not_err!(Merger::new(&repo, None, Some("foobar"), None));
         let oid = head_oid(&repo);
 
         let note = make_note(oid, oid, "refs/heads/master");
@@ -499,7 +506,7 @@ mod tests {
         let (td, _raw) = ::test::raw_repo_init();
         let config = ::test::config_init(&td);
         let repo = ::test::repo_init(&config);
-        let merger = not_err!(Merger::new(&repo, None, Some("foobar")));
+        let merger = not_err!(Merger::new(&repo, None, Some("foobar"), None));
 
         let oid = head_oid(&repo);
         let branch_oid = add_branch_commit(&repo);
@@ -515,7 +522,7 @@ mod tests {
         let (td, _raw) = ::test::raw_repo_init();
         let config = ::test::config_init(&td);
         let repo = ::test::repo_init(&config);
-        let merger = not_err!(Merger::new(&repo, None, Some("foobar")));
+        let merger = not_err!(Merger::new(&repo, None, Some("foobar"), None));
 
         let oid = head_oid(&repo);
         let branch_oid = add_branch_commit(&repo);
@@ -534,7 +541,7 @@ mod tests {
         let (td, _raw) = ::test::raw_repo_init();
         let config = ::test::config_init(&td);
         let repo = ::test::repo_init(&config);
-        let merger = not_err!(Merger::new(&repo, None, Some("foobar")));
+        let merger = not_err!(Merger::new(&repo, None, Some("foobar"), None));
 
         let oid = head_oid(&repo);
         let branch_oid = add_branch_commit(&repo);
@@ -557,7 +564,7 @@ mod tests {
         let (td, _raw) = ::test::raw_repo_init();
         let config = ::test::config_init(&td);
         let repo = ::test::repo_init(&config);
-        let merger = not_err!(Merger::new(&repo, None, Some("foobar")));
+        let merger = not_err!(Merger::new(&repo, None, Some("foobar"), None));
 
         let oid = head_oid(&repo);
         let branch_oid = add_branch_commit(&repo);
@@ -604,5 +611,36 @@ mod tests {
         let expected = "refs/fusionner/some-branch/master";
         let actual = MergeReferenceNamer::Default.resolve("refs/heads/some-branch", "refs/heads/master", oid, oid);
         assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn custom_merge_reference_namer_is_invoked() {
+        let hit = Cell::new(false);
+
+        {
+            let namer = MergeReferenceNamer::Custom(Box::new(|reference: &str,
+                                                              target_reference: &str,
+                                                              _oid: git2::Oid,
+                                                              _target_oid: git2::Oid| {
+                hit.set(true);
+
+                format!("{};{}", reference, target_reference)
+            }));
+
+            let (td, _raw) = ::test::raw_repo_init();
+            let config = ::test::config_init(&td);
+            let repo = ::test::repo_init(&config);
+            let merger = not_err!(Merger::new(&repo, None, Some("foobar"), Some(namer)));
+
+            let oid = head_oid(&repo);
+            let branch_oid = add_branch_commit(&repo);
+            let reference = "refs/heads/branch";
+            let target_reference = "refs/heads/master";
+
+            let merge = not_err!(merger.merge(branch_oid, oid, reference, target_reference));
+
+            assert_eq!("refs/heads/branch;refs/heads/master", merge.merge_reference);
+        }
+        assert!(hit.get());
     }
 }

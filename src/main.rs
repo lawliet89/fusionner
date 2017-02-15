@@ -146,7 +146,8 @@ fn process(config: &Config, watch_refs: &WatchReferences, target_ref: &Option<St
     let mut remote = map_err!(repo.remote(remote_name))?;
     let mut merger = map_err!(merger::Merger::new(&repo,
                                                   remote_name,
-                                                  to_option_str(&config.repository.notes_namespace)))?;
+                                                  to_option_str(&config.repository.notes_namespace),
+                                                  None))?;
 
     // Add the necessary refspecs
     map_err!(merger.add_note_refspecs())?;

@@ -179,7 +179,7 @@ impl<'repo> Remote<'repo> {
                             -> Result<git2::RemoteConnection<'repo, 'connection, 'connection>, git2::Error> {
         let callbacks = Repository::remote_callbacks(self.repository.details);
         info!("Connecting to remote");
-        self.remote.connect(git2::Direction::Fetch, Some(callbacks), None)
+        self.remote.connect_auth(git2::Direction::Fetch, Some(callbacks), None)
     }
 
     pub fn disconnect(&mut self) {

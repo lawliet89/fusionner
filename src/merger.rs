@@ -47,7 +47,7 @@ pub struct Merge {
 }
 
 /// Fn(reference: &str, target_reference: &str, oid: git2::Oid, target_oid: git2::Oid) -> String
-type MergeReferenceNamerCallback<'a> = Fn(&str, &str, git2::Oid, git2::Oid) -> String + 'a;
+pub type MergeReferenceNamerCallback<'a> = Fn(&str, &str, git2::Oid, git2::Oid) -> String + 'a;
 
 // TODO: Allow customizing of this, but only in code
 /// The default namer will create a reference at `refs/fusionner/{reference}/{target}`

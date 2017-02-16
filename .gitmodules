@@ -1,3 +1,0 @@
-[submodule "git2-rs"]
-	path = git2-rs
-	url = https://github.com/alexcrichton/git2-rs.git

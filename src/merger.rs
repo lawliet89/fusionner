@@ -91,23 +91,22 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
 
     /// Add refspecs to a remote to fetch/push commit notes, specific for fusionner
     pub fn add_note_refspecs(&self) -> Result<(), git2::Error> {
-        let src = self.notes_reference_base();
+        let src = self.notes_reference();
         let refspec = self.remote.generate_refspec(&src, true).map_err(|e| git_err!(&e))?;
 
         self.remote.add_refspec(&refspec, git2::Direction::Fetch)?;
         self.remote.add_refspec(&refspec, git2::Direction::Push)
     }
 
-    pub fn fetch_notes(&mut self, commits: &[&str]) -> Result<(), git2::Error> {
-        let refs: Vec<String> = commits.iter().map(|commit| self.note_ref(commit)).collect();
-        let refs_refs: Vec<&str> = utils::as_str_slice(&refs);
+    pub fn fetch_notes(&mut self) -> Result<(), git2::Error> {
+        let refs = [self.notes_reference()];
 
-        self.remote.fetch(&refs_refs)
+        self.remote.fetch(&utils::as_str_slice(&refs))
     }
 
     /// Find note for commit. Make sure you have fetched them first
     pub fn find_note(&self, oid: git2::Oid) -> Result<Note, git2::Error> {
-        let notes_ref = self.notes_reference_base();
+        let notes_ref = self.notes_reference();
         let note = self.repository.repository.find_note(Some(&notes_ref), oid)?;
         note.message()
             .ok_or(git_err!(&"Invalid message in note for oid"))
@@ -121,7 +120,7 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
 
         self.repository.repository.note(&signature,
                                         &signature,
-                                        Some(&self.notes_reference_base()),
+                                        Some(&self.notes_reference()),
                                         oid,
                                         &serialized_note,
                                         true)
@@ -234,11 +233,7 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
         format!("Merge {} into {}", base_oid, target_oid)
     }
 
-    fn note_ref(&self, commit: &str) -> String {
-        format!("{}/{}", self.notes_reference_base(), commit)
-    }
-
-    fn notes_reference_base(&self) -> String {
+    pub fn notes_reference(&self) -> String {
         format!("refs/notes/{}", self.namespace)
     }
 }

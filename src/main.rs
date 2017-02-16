@@ -218,8 +218,7 @@ fn process_loop(remote: &mut git::Remote,
     let target_oid = resolve_oid(target_ref, &remote_ls).ok_or(git_err!("Unable to find OID for target reference"))?;
 
     info!("Fetching notes for commits");
-    let commits: Vec<String> = oids.values().map(|oid| format!("{}", oid)).collect();
-    merger.fetch_notes(utils::as_str_slice(&commits).as_slice())?;
+    merger.fetch_notes()?;
 
     for (reference, oid) in oids {
         let should_merge = merger.should_merge(oid, target_oid, &reference, target_ref);

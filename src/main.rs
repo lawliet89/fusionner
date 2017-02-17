@@ -20,7 +20,7 @@ mod utils;
 #[macro_use]
 mod test;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::Read;
 use std::vec::Vec;
@@ -220,6 +220,7 @@ fn process_loop(remote: &mut git::Remote,
     info!("Fetching notes for commits");
     merger.fetch_notes()?;
 
+    let mut push_references = HashSet::<String>::new();
     for (reference, oid) in oids {
         let should_merge = merger.should_merge(oid, target_oid, &reference, target_ref);
         info!("Merging {} ({} into {})?: {:?}",
@@ -232,6 +233,7 @@ fn process_loop(remote: &mut git::Remote,
             merger::ShouldMergeResult::Merge(note) => {
                 info!("Performing merge");
                 let merge = merger.merge(oid, target_oid, &reference, target_ref)?;
+                push_references.insert(merge.merge_reference.to_string());
 
                 let note = match note {
                     None => merger::Note::new_with_merge(merge),
@@ -256,8 +258,11 @@ fn process_loop(remote: &mut git::Remote,
         };
 
     }
+
+    push_references.insert(merger.notes_reference());
+    let push_references_slice: Vec<&str> = push_references.iter().map(|s| &**s).collect();
     info!("Pushing to remote");
-    merger.push()?;
+    remote.push(&push_references_slice)?;
 
     remote.disconnect();
     Ok(())

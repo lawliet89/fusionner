@@ -224,11 +224,6 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
                       &commit_reference))
     }
 
-    pub fn push(&mut self) -> Result<(), git2::Error> {
-        info!("Pushing with configured refspecs");
-        self.remote.push(&[])
-    }
-
     fn merge_commit_message(base_oid: git2::Oid,
                             target_oid: git2::Oid,
                             reference: &str,

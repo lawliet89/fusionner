@@ -91,15 +91,14 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
 
     /// Add refspecs to a remote to fetch/push commit notes, specific for fusionner
     pub fn add_note_refspecs(&self) -> Result<(), git2::Error> {
-        let src = self.notes_reference();
-        let refspec = self.remote.generate_refspec(&src, true).map_err(|e| git_err!(&e))?;
+        let refspec = format!("+{}", self.notes_refspec());
 
         self.remote.add_refspec(&refspec, git2::Direction::Fetch)?;
         self.remote.add_refspec(&refspec, git2::Direction::Push)
     }
 
     pub fn fetch_notes(&mut self) -> Result<(), git2::Error> {
-        let refs = [format!("+{}", self.notes_reference())];
+        let refs = [format!("+{}", self.notes_refspec())];
 
         self.remote.fetch(&utils::as_str_slice(&refs))
     }
@@ -284,6 +283,10 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
                 target_oid)
     }
 
+    pub fn notes_refspec(&self) -> String {
+        format!("{0}:{0}", self.notes_reference())
+    }
+
     pub fn notes_reference(&self) -> String {
         format!("refs/notes/{}", self.namespace)
     }
@@ -464,14 +467,14 @@ mod tests {
         not_none!(remote.refspecs().find(|r| {
             let refspec = r.str();
             let direction = git2::Direction::Fetch;
-            refspec.is_some() && refspec.unwrap() == "+refs/notes/fusionner:refs/remotes/origin/notes/fusionner" &&
+            refspec.is_some() && refspec.unwrap() == "+refs/notes/fusionner:refs/notes/fusionner" &&
             git::Remote::direction_eq(&r.direction(), &direction)
         }));
 
         not_none!(remote.refspecs().find(|r| {
             let refspec = r.str();
             let direction = git2::Direction::Push;
-            refspec.is_some() && refspec.unwrap() == "+refs/notes/fusionner:refs/remotes/origin/notes/fusionner" &&
+            refspec.is_some() && refspec.unwrap() == "+refs/notes/fusionner:refs/notes/fusionner" &&
             git::Remote::direction_eq(&r.direction(), &direction)
         }));
     }
@@ -489,14 +492,14 @@ mod tests {
         not_none!(remote.refspecs().find(|r| {
             let refspec = r.str();
             let direction = git2::Direction::Fetch;
-            refspec.is_some() && refspec.unwrap() == "+refs/notes/foobar:refs/remotes/origin/notes/foobar" &&
+            refspec.is_some() && refspec.unwrap() == "+refs/notes/foobar:refs/notes/foobar" &&
             git::Remote::direction_eq(&r.direction(), &direction)
         }));
 
         not_none!(remote.refspecs().find(|r| {
             let refspec = r.str();
             let direction = git2::Direction::Push;
-            refspec.is_some() && refspec.unwrap() == "+refs/notes/foobar:refs/remotes/origin/notes/foobar" &&
+            refspec.is_some() && refspec.unwrap() == "+refs/notes/foobar:refs/notes/foobar" &&
             git::Remote::direction_eq(&r.direction(), &direction)
         }));
     }

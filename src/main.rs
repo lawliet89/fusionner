@@ -251,7 +251,7 @@ fn process_loop(remote: &mut git::Remote,
         }
     }
 
-    push_references.insert(merger.notes_reference());
+    push_references.insert(merger.notes_refspec());
     let push_references_force: Vec<String> = push_references.iter()
         .map(|s| format!("+{}", s))
         .collect();

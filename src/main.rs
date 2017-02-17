@@ -41,9 +41,10 @@ Use <watch-ref> to define the Git references to watch for commits.
 Use --watch-regex=<regex> instead to specify references that matches the Regex
 
 Options:
+  --remote=<remote>                 Name of the remote to use. Defaults to `origin`
+  --target-reference=<reference>    The target reference for references to be meged against. Defaults to remote HEAD
   --log-level=<log-level>           The default log level is `info`.
                                     Can be set to `trace`, `debug`, `info`, `warn`, or `error`
-  --target-reference=<reference>    The target reference for references to be meged against. Defaults to remote HEAD
   -h --help                         Show this screen.
 ";
 
@@ -53,6 +54,7 @@ struct Args {
     flag_watch_regex: Vec<String>,
     flag_log_level: Option<String>,
     flag_target_reference: Option<String>,
+    flag_remote: Option<String>,
     arg_watch_ref: Vec<String>,
 }
 
@@ -127,7 +129,7 @@ fn main() {
 
         info!("Watch Referemces: {:?}", watch_refs);
 
-        return_code = match process(&config, &watch_refs, &args.flag_target_reference) {
+        return_code = match process(&config, &watch_refs, &args.flag_target_reference, &args.flag_remote) {
             Ok(_) => 0,
             Err(err) => {
                 error!("Error: {}", err);
@@ -139,10 +141,10 @@ fn main() {
     std::process::exit(return_code);
 }
 
-fn process(config: &Config, watch_refs: &WatchReferences, target_ref: &Option<String>) -> Result<(), String> {
+fn process(config: &Config, watch_refs: &WatchReferences, target_ref: &Option<String>, remote_name: &Option<String>) -> Result<(), String> {
     // Create our structs
     let repo = map_err!(git::Repository::clone_or_open(&config.repository))?;
-    let remote_name = to_option_str(&config.repository.remote);
+    let remote_name = to_option_str(remote_name);
     let mut remote = map_err!(repo.remote(remote_name))?;
     let mut merger = map_err!(merger::Merger::new(&repo,
                                                   remote_name,

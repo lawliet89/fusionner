@@ -207,7 +207,7 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
         }
 
         let signature = self.repository.signature()?;
-        let commit_message = Merger::merge_commit_message(oid, target_oid);
+        let commit_message = Merger::merge_commit_message(oid, target_oid, reference, target_reference);
         let merge_oid = self.repository
             .repository
             .commit(Some(&commit_reference),
@@ -229,8 +229,16 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
         self.remote.push(&[])
     }
 
-    fn merge_commit_message(base_oid: git2::Oid, target_oid: git2::Oid) -> String {
-        format!("Merge {} into {}", base_oid, target_oid)
+    fn merge_commit_message(base_oid: git2::Oid,
+                            target_oid: git2::Oid,
+                            reference: &str,
+                            target_reference: &str)
+                            -> String {
+        format!("Merge {} ({}) into {} ({})",
+                reference,
+                target_reference,
+                base_oid,
+                target_oid)
     }
 
     pub fn notes_reference(&self) -> String {

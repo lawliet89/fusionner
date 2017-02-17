@@ -244,7 +244,10 @@ fn process_loop(remote: &mut git::Remote,
     }
 
     push_references.insert(merger.notes_reference());
-    let push_references_slice: Vec<&str> = push_references.iter().map(|s| &**s).collect();
+    let push_references_force: Vec<String> = push_references.iter()
+        .map(|s| format!("+{}", s))
+        .collect();
+    let push_references_slice: Vec<&str> = push_references_force.iter().map(|s| &**s).collect();
     info!("Pushing to remote");
     remote.push(&push_references_slice)?;
 

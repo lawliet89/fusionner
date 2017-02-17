@@ -299,8 +299,9 @@ impl<'repo> Remote<'repo> {
                     return Err(git_err!(&format!("Could not find {} on remote", reference)));
                 }
                 Ok(reference.to_string())
-            },
-            None | Some(_) => { // matches Some("HEAD")
+            }
+            None | Some(_) => {
+                // matches Some("HEAD")
                 let head = self.head()?;
                 if let None = head {
                     return Err(git_err!("Could not find a default HEAD on remote"));
@@ -342,6 +343,10 @@ mod tests {
     use git2_raw;
     use tempdir::TempDir;
     use git::{Repository, Remote};
+
+    fn to_option_str(opt: &Option<String>) -> Option<&str> {
+        opt.as_ref().map(|s| &**s)
+    }
 
     #[test]
     fn smoke_test_opem() {
@@ -458,5 +463,51 @@ mod tests {
         for (left, right, expected_result) in test_values {
             assert_eq!(expected_result, Remote::direction_eq(&left, &right));
         }
+    }
+
+    #[test]
+    fn target_ref_is_resolved_to_head_by_default() {
+        let (td, _raw) = ::test::raw_repo_init();
+        let mut config = ::test::config_init(&td);
+
+        let td_new = TempDir::new("test").unwrap();
+        config.checkout_path = not_none!(td_new.path().to_str()).to_string();
+
+        let repo = not_err!(Repository::clone_or_open(&config));
+        let mut remote = not_err!(repo.remote(None));
+
+        let target_ref = not_err!(remote.resolve_target_ref(None));
+        assert_eq!("refs/heads/master", target_ref);
+    }
+
+    #[test]
+    fn target_ref_is_resolved_correctly() {
+        let (td, _raw) = ::test::raw_repo_init();
+        let mut config = ::test::config_init(&td);
+        let target_ref = Some("refs/heads/master".to_string());
+
+        let td_new = TempDir::new("test").unwrap();
+        config.checkout_path = not_none!(td_new.path().to_str()).to_string();
+
+        let repo = not_err!(Repository::clone_or_open(&config));
+        let mut remote = not_err!(repo.remote(None));
+
+        let target_ref = not_err!(remote.resolve_target_ref(to_option_str(&target_ref)));
+        assert_eq!("refs/heads/master", target_ref);
+    }
+
+    #[test]
+    fn invalid_target_ref_should_error() {
+        let (td, _raw) = ::test::raw_repo_init();
+        let mut config = ::test::config_init(&td);
+        let target_ref = Some("refs/heads/unknown".to_string());
+
+        let td_new = TempDir::new("test").unwrap();
+        config.checkout_path = not_none!(td_new.path().to_str()).to_string();
+
+        let repo = not_err!(Repository::clone_or_open(&config));
+        let mut remote = not_err!(repo.remote(None));
+
+        is_err!(remote.resolve_target_ref(to_option_str(&target_ref)));
     }
 }

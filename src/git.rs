@@ -235,6 +235,10 @@ impl<'repo> Remote<'repo> {
 
         debug!("Fetching {:?}", refspecs);
         self.remote.fetch(refspecs, Some(&mut fetch_options), None)?;
+
+        let mut callbacks = Repository::remote_callbacks(self.repository.details);
+        self.remote.update_tips(Some(&mut callbacks), true, git2::AutotagOption::Unspecified, None)?;
+
         self.remote.disconnect();
         Ok(())
     }

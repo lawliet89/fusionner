@@ -226,62 +226,49 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
 
 
     /// Convenience method to check if a merge is required, and merge if needed.
-    /// Also creates the necessary notes. Can optionally push to remote.
-    pub fn check_and_merge(&mut self,
+    pub fn check_and_merge(&self,
                            oid: git2::Oid,
                            target_oid: git2::Oid,
                            reference: &str,
-                           target_ref: &str,
-                           push: bool)
+                           target_ref: &str)
                            -> Result<Merge, git2::Error> {
-        let merge = {
-            let should_merge = self.should_merge(oid, target_oid, reference, target_ref);
-            info!("Merging {} ({} into {})?: {:?}",
-                  reference,
-                  oid,
-                  target_oid,
-                  should_merge);
+        let should_merge = self.should_merge(oid, target_oid, reference, target_ref);
+        info!("Merging {} ({} into {})?: {:?}",
+              reference,
+              oid,
+              target_oid,
+              should_merge);
 
-            match should_merge {
-                ShouldMergeResult::Merge(note) => {
-                    info!("Performing merge");
-                    let merge = self.merge(oid, target_oid, &reference, target_ref)?;
+        Ok(match should_merge {
+            ShouldMergeResult::Merge(note) => {
+                info!("Performing merge");
+                let merge = self.merge(oid, target_oid, &reference, target_ref)?;
 
-                    let note = match note {
-                        None => Note::new_with_merge(merge.clone()),
-                        Some(mut note) => {
-                            note.append_with_merge(merge.clone());
-                            note
-                        }
-                    };
+                let note = match note {
+                    None => Note::new_with_merge(merge.clone()),
+                    Some(mut note) => {
+                        note.append_with_merge(merge.clone());
+                        note
+                    }
+                };
 
-                    info!("Adding note: {:?}", note);
-                    self.add_note(&note, oid)?;
-                    merge
-                }
-                ShouldMergeResult::ExistingMergeInSameTargetReference(note) => {
-                    info!("Merge commit is up to date");
-                    // Should be safe to unwrap
-                    note.merges.get(target_ref).unwrap().clone()
-                }
-                ShouldMergeResult::ExistingMergeInDifferentTargetReference { mut note, merges, proposed_merge } => {
-                    info!("Merge found under other target references: {:?}", merges);
-                    note.append_with_merge(proposed_merge.clone());
-                    info!("Adding note: {:?}", note);
-                    self.add_note(&note, oid)?;
-                    proposed_merge
-                }
+                info!("Adding note: {:?}", note);
+                self.add_note(&note, oid)?;
+                merge
             }
-        };
-
-        if push {
-            let notes_reference = self.notes_reference();
-            let refspecs = [&*merge.merge_reference, &*notes_reference];
-            info!("Pushing to {:?}", refspecs);
-            self.remote.push(&refspecs)?;
-        }
-
-        Ok(merge)
+            ShouldMergeResult::ExistingMergeInSameTargetReference(note) => {
+                info!("Merge commit is up to date");
+                // Should be safe to unwrap
+                note.merges.get(target_ref).unwrap().clone()
+            }
+            ShouldMergeResult::ExistingMergeInDifferentTargetReference { mut note, merges, proposed_merge } => {
+                info!("Merge found under other target references: {:?}", merges);
+                note.append_with_merge(proposed_merge.clone());
+                info!("Adding note: {:?}", note);
+                self.add_note(&note, oid)?;
+                proposed_merge
+            }
+        })
     }
 
     fn merge_commit_message(base_oid: git2::Oid,
@@ -541,6 +528,27 @@ mod tests {
         // And we should not meed to merge again
         let should_merge = merger.should_merge(branch_oid, oid, reference, target_reference);
         assert_matches!(should_merge, ShouldMergeResult::ExistingMergeInSameTargetReference{..})
+    }
+
+    #[test]
+    fn check_and_merge_smoke_test() {
+        let (td, raw) = ::test::raw_repo_init();
+        let config = ::test::config_init(&td);
+        let repo = ::test::repo_init(&config);
+        let merger = not_err!(Merger::new(&repo, None, Some("foobar"), None));
+
+        let oid = head_oid(&repo);
+        let branch_oid = add_branch_commit(&repo);
+        let reference = "refs/heads/branch";
+        let target_reference = "refs/heads/master";
+
+        let merge = not_err!(merger.check_and_merge(branch_oid, oid, reference, target_reference));
+        assert_eq!(merge.target_parent_oid, format!("{}", oid));
+        assert_eq!(merge.target_parent_reference, target_reference);
+        assert_eq!(merge.parents_oid, vec![format!("{}", branch_oid)]);
+
+        let merge_oid = not_err!(git2::Oid::from_str(&merge.merge_oid));
+        not_err!(raw.find_commit(merge_oid));
     }
 
     #[test]

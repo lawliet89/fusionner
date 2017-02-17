@@ -225,7 +225,7 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
 
 
     /// Convenience method to check if a merge is required, and merge if needed.
-    pub fn check_and_merge(&self,
+    pub fn check_and_merge(&mut self,
                            oid: git2::Oid,
                            target_oid: git2::Oid,
                            reference: &str,
@@ -259,13 +259,20 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
             ShouldMergeResult::ExistingMergeInSameTargetReference(note) => {
                 info!("Merge commit is up to date");
                 // Should be safe to unwrap
-                note.merges.get(target_ref).unwrap().clone()
+                let merge = note.merges.get(target_ref).unwrap().clone();
+                // Fetch merge
+                let fetch_refspec = [format!("+{}", merge.merge_reference)];
+                self.remote.fetch(&utils::as_str_slice(&fetch_refspec))?;
+                merge
             }
             ShouldMergeResult::ExistingMergeInDifferentTargetReference { mut note, merges, proposed_merge } => {
                 info!("Merge found under other target references: {:?}", merges);
                 note.append_with_merge(proposed_merge.clone());
                 info!("Adding note: {:?}", note);
                 self.add_note(&note, oid)?;
+                 // Fetch merge
+                let fetch_refspec = [format!("+{}", proposed_merge.merge_reference)];
+                self.remote.fetch(&utils::as_str_slice(&fetch_refspec))?;
                 proposed_merge
             }
         })
@@ -539,7 +546,7 @@ mod tests {
         let (td, raw) = ::test::raw_repo_init();
         let config = ::test::config_init(&td);
         let repo = ::test::repo_init(&config);
-        let merger = not_err!(Merger::new(&repo, None, Some("foobar"), None));
+        let mut merger = not_err!(Merger::new(&repo, None, Some("foobar"), None));
 
         let oid = head_oid(&repo);
         let branch_oid = add_branch_commit(&repo);

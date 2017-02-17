@@ -233,41 +233,14 @@ fn process_loop(remote: &mut git::Remote,
 
     let mut push_references = HashSet::<String>::new();
     for (reference, oid) in oids {
-        let should_merge = merger.should_merge(oid, target_oid, &reference, target_ref);
-        info!("Merging {} ({} into {})?: {:?}",
-              reference,
-              oid,
-              target_oid,
-              should_merge);
-
-        match should_merge {
-            merger::ShouldMergeResult::Merge(note) => {
-                info!("Performing merge");
-                let merge = merger.merge(oid, target_oid, &reference, target_ref)?;
-                push_references.insert(merge.merge_reference.to_string());
-
-                let note = match note {
-                    None => merger::Note::new_with_merge(merge),
-                    Some(mut note) => {
-                        note.append_with_merge(merge);
-                        note
-                    }
-                };
-
-                info!("Adding note: {:?}", note);
-                merger.add_note(&note, oid)?;
+        match merger.check_and_merge(oid, target_oid, &reference, target_ref) {
+            Ok(merge) => {
+                push_references.insert(merge.merge_reference);
             }
-            merger::ShouldMergeResult::ExistingMergeInSameTargetReference(_) => {
-                info!("Merge commit is up to date");
+            Err(e) => {
+                error!("Error processing {} ({}): {:?}", reference, oid, e);
             }
-            merger::ShouldMergeResult::ExistingMergeInDifferentTargetReference { mut note, merges, proposed_merge } => {
-                info!("Merge found under other target references: {:?}", merges);
-                note.append_with_merge(proposed_merge);
-                info!("Adding note: {:?}", note);
-                merger.add_note(&note, oid)?;
-            }
-        };
-
+        }
     }
 
     push_references.insert(merger.notes_reference());

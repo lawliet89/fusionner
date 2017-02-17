@@ -99,7 +99,7 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
     }
 
     pub fn fetch_notes(&mut self) -> Result<(), git2::Error> {
-        let refs = [self.notes_reference()];
+        let refs = [format!("+{}", self.notes_reference())];
 
         self.remote.fetch(&utils::as_str_slice(&refs))
     }

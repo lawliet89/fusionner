@@ -208,7 +208,15 @@ fn process_loop(remote: &mut git::Remote,
     info!("Fetching matched remotes and target reference");
     let mut fetch_refs = watch_heads.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
     fetch_refs.push(target_ref);
-    remote.fetch(&fetch_refs)?;
+
+    {
+        let forced_fetch_refs: Vec<String> = fetch_refs.iter()
+            .map(|s| format!("+{}", s))
+            .collect();
+        let forced_fetch_refs_slice: Vec<&str> = forced_fetch_refs.iter().map(|s| &**s).collect();
+
+        remote.fetch(&forced_fetch_refs_slice)?;
+    }
 
     info!("Resolving references and oid");
     let oids: HashMap<String, git2::Oid> = resolve_oids(fetch_refs.as_slice(), remote_ls.as_slice())

@@ -233,9 +233,10 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
                            target_ref: &str)
                            -> Result<Merge, git2::Error> {
         let should_merge = self.should_merge(oid, target_oid, reference, target_ref);
-        info!("Merging {} ({} into {})?: {:?}",
+        info!("Merging {} ({}) into {} ({}): {:?}",
               reference,
               oid,
+              target_ref,
               target_oid,
               should_merge);
 

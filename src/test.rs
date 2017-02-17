@@ -67,8 +67,6 @@ pub fn config_init(tempdir: &TempDir) -> ::RepositoryConfiguration {
     ::RepositoryConfiguration {
         uri: path2url(&path),
         checkout_path: path.to_str().unwrap().to_string(),
-        remote: None,
-        notes_namespace: None,
         fetch_refspecs: vec![],
         push_refspecs: vec![],
         username: Some("foobar".to_string()),

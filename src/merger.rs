@@ -276,7 +276,7 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
                             reference: &str,
                             target_reference: &str)
                             -> String {
-        format!("Merge {} ({}) into {} ({})",
+        format!("Merge {0} ({2}) into {1} ({3})",
                 reference,
                 target_reference,
                 base_oid,

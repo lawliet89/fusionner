@@ -225,11 +225,14 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
 
 
     /// Convenience method to check if a merge is required, and merge if needed.
+    /// Will fetch remote merge references.
+    /// Will push, if desired
     pub fn check_and_merge(&mut self,
                            oid: git2::Oid,
                            target_oid: git2::Oid,
                            reference: &str,
-                           target_ref: &str)
+                           target_ref: &str,
+                           push: bool)
                            -> Result<Merge, git2::Error> {
         let should_merge = self.should_merge(oid, target_oid, reference, target_ref);
         info!("Merging {} ({}) into {} ({}): {:?}",
@@ -239,10 +242,13 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
               target_oid,
               should_merge);
 
-        Ok(match should_merge {
+        let mut push_reference = vec![self.notes_reference()];
+
+        let merge = match should_merge {
             ShouldMergeResult::Merge(note) => {
                 info!("Performing merge");
                 let merge = self.merge(oid, target_oid, &reference, target_ref)?;
+                push_reference.push(merge.merge_reference.to_string());
 
                 let note = match note {
                     None => Note::new_with_merge(merge.clone()),
@@ -275,7 +281,19 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
                 self.remote.fetch(&utils::as_str_slice(&fetch_refspec))?;
                 proposed_merge
             }
-        })
+        };
+
+        if push {
+            let refspecs: Vec<String> = push_reference
+                .iter()
+                .map(|s| format!("+{}", s))
+                .collect();
+            let refspecs_slice: Vec<&str> = refspecs.iter().map(|s| &**s).collect();
+            info!("Pushing to {:?}", refspecs);
+            self.remote.push(&refspecs_slice)?;
+        }
+
+        Ok(merge)
     }
 
     fn merge_commit_message(base_oid: git2::Oid,
@@ -553,7 +571,7 @@ mod tests {
         let reference = "refs/heads/branch";
         let target_reference = "refs/heads/master";
 
-        let merge = not_err!(merger.check_and_merge(branch_oid, oid, reference, target_reference));
+        let merge = not_err!(merger.check_and_merge(branch_oid, oid, reference, target_reference, false));
         assert_eq!(merge.target_parent_oid, format!("{}", oid));
         assert_eq!(merge.target_parent_reference, target_reference);
         assert_eq!(merge.parents_oid, vec![format!("{}", branch_oid)]);

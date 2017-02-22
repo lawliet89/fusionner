@@ -141,16 +141,7 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
         }
 
         let note = note.unwrap();
-        let matching_merges: HashMap<&String, &Merge> = note.merges
-            .iter()
-            .filter(|&(_target_parent_reference, merge)| {
-                let oid = git2::Oid::from_str(&merge.target_parent_oid);
-                match oid {
-                    Err(_) => false,
-                    Ok(oid) => oid == target_oid,
-                }
-            })
-            .collect();
+        let matching_merges = note.find_matching_merges(target_oid);
         if matching_merges.len() == 0 {
             ShouldMergeResult::Merge(Some(note.clone()))
         } else {
@@ -276,7 +267,7 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
                 note.append_with_merge(proposed_merge.clone());
                 info!("Adding note: {:?}", note);
                 self.add_note(&note, oid)?;
-                 // Fetch merge
+                // Fetch merge
                 let fetch_refspec = [format!("+{}", proposed_merge.merge_reference)];
                 self.remote.fetch(&utils::as_str_slice(&fetch_refspec))?;
                 proposed_merge
@@ -284,8 +275,7 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
         };
 
         if push {
-            let refspecs: Vec<String> = push_reference
-                .iter()
+            let refspecs: Vec<String> = push_reference.iter()
                 .map(|s| format!("+{}", s))
                 .collect();
             let refspecs_slice: Vec<&str> = refspecs.iter().map(|s| &**s).collect();
@@ -333,6 +323,19 @@ impl Note {
     /// Returns the previous Merge if it existed
     pub fn append_with_merge(&mut self, merge: Merge) -> Option<Merge> {
         self.merges.insert(merge.target_parent_reference.to_string(), merge)
+    }
+
+    pub fn find_matching_merges(&self, target_oid: git2::Oid) -> HashMap<&String, &Merge> {
+        self.merges
+            .iter()
+            .filter(|&(_target_parent_reference, merge)| {
+                let oid = git2::Oid::from_str(&merge.target_parent_oid);
+                match oid {
+                    Err(_) => false,
+                    Ok(oid) => oid == target_oid,
+                }
+            })
+            .collect()
     }
 }
 
@@ -530,6 +533,21 @@ mod tests {
     }
 
     #[test]
+    fn correct_merges_are_found_from_note() {
+        let oid = not_err!(git2::Oid::from_str("78314aadffca88c53c91f8e3bea9b6d582504ba6"));
+        let target_oid = not_err!(git2::Oid::from_str("99dbca6642980876d004188b52f01d01d48a82e0"));
+
+        let merges = [("refs/heads/master".to_string(), make_merge(oid, target_oid, "refs/heads/master")),
+                      ("refs/heads/develop".to_string(), make_merge(oid, target_oid, "refs/heads/develop"))]
+            .iter()
+            .cloned()
+            .collect();
+        let note = Note::new(merges);
+        let matching_merges = note.find_matching_merges(target_oid);
+        assert_eq!(2, matching_merges.len());
+    }
+
+    #[test]
     fn merge_smoke_test() {
         let (td, _raw) = ::test::raw_repo_init();
         let config = ::test::config_init(&td);
@@ -673,7 +691,6 @@ mod tests {
         let should_merge = merger.should_merge(branch_oid, oid, reference, new_target_reference);
         assert_matches!(should_merge, ShouldMergeResult::ExistingMergeInDifferentTargetReference{ .. });
     }
-
 
     #[test]
     fn notes_only_has_latest_merge_for_target_reference() {

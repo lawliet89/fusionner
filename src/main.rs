@@ -242,7 +242,7 @@ fn process_loop(remote: &mut git::Remote,
     let mut push_references = HashSet::<String>::new();
     for (reference, oid) in oids {
         match merger.check_and_merge(oid, target_oid, &reference, target_ref, true) {
-            Ok(merge) => {
+            Ok((merge, _should_merge)) => {
                 push_references.insert(merge.merge_reference);
             }
             Err(e) => {

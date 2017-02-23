@@ -388,7 +388,7 @@ impl fmt::Display for ShouldMergeResult {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let formatted = match self {
             &ShouldMergeResult::Merge(_) => "Merge required",
-            &ShouldMergeResult::ExistingMergeInSameTargetReference { .. } => "An updated merge exists",
+            &ShouldMergeResult::ExistingMergeInSameTargetReference { .. } => "An up to date merge exists",
             &ShouldMergeResult::ExistingMergeInDifferentTargetReference { .. } => {
                 "A merge under another target reference exists"
             }

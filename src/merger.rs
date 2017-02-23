@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt;
 use std::vec::Vec;
 
 use super::{git2, git2_raw};
@@ -226,12 +227,13 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
                            push: bool)
                            -> Result<(Merge, ShouldMergeResult), git2::Error> {
         let should_merge = self.should_merge(oid, target_oid, reference, target_ref);
-        info!("Merging {} ({}) into {} ({}): {:?}",
+        info!("Merging {} ({}) into {} ({}): {}",
               reference,
               oid,
               target_ref,
               target_oid,
               should_merge);
+        debug!("{:?}", should_merge);
 
         let mut push_reference = vec![self.notes_reference()];
 
@@ -379,6 +381,19 @@ impl<'cb> MergeReferenceNamer<'cb> {
 
     fn reference_last_item(reference: &str) -> String {
         reference.split('/').last().or(Some("")).map(|s| s.to_string()).unwrap()
+    }
+}
+
+impl fmt::Display for ShouldMergeResult {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let formatted = match self {
+            &ShouldMergeResult::Merge(_) => "Merge required",
+            &ShouldMergeResult::ExistingMergeInSameTargetReference { .. } => "An updated merge exists",
+            &ShouldMergeResult::ExistingMergeInDifferentTargetReference { .. } => {
+                "A merge under another target reference exists"
+            }
+        };
+        write!(f, "{}", formatted)
     }
 }
 

@@ -211,7 +211,7 @@ fn process_loop(remote: &mut git::Remote,
 
     {
         let forced_fetch_refs: Vec<String> = fetch_refs.iter()
-            .map(|s| format!("+{}", s))
+            .map(|s| git::RefspecStr::to_forced(s))
             .collect();
         let forced_fetch_refs_slice: Vec<&str> = forced_fetch_refs.iter().map(|s| &**s).collect();
 

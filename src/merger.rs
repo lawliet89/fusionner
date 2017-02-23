@@ -91,14 +91,14 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
 
     /// Add refspecs to a remote to fetch/push commit notes, specific for fusionner
     pub fn add_note_refspecs(&self) -> Result<(), git2::Error> {
-        let refspec = format!("+{}", self.notes_refspec());
+        let refspec = format!("+{0}:{0}", self.notes_reference());
 
         self.remote.add_refspec(&refspec, git2::Direction::Fetch)?;
         self.remote.add_refspec(&refspec, git2::Direction::Push)
     }
 
     pub fn fetch_notes(&mut self) -> Result<(), git2::Error> {
-        let refs = [format!("+{}", self.notes_refspec())];
+        let refs = [format!("+{0}:{0}", self.notes_reference())];
 
         self.remote.fetch(&utils::as_str_slice(&refs))
     }
@@ -258,7 +258,7 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
                 // Should be safe to unwrap
                 let merge = note.merges.get(target_ref).unwrap().clone();
                 // Fetch merge
-                let fetch_refspec = [format!("+{}", merge.merge_reference)];
+                let fetch_refspec = [::git::RefspecStr::to_forced(&merge.merge_reference)];
                 self.remote.fetch(&utils::as_str_slice(&fetch_refspec))?;
                 merge
             }
@@ -268,7 +268,7 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
                 info!("Adding note: {:?}", note);
                 self.add_note(&note, oid)?;
                 // Fetch merge
-                let fetch_refspec = [format!("+{}", proposed_merge.merge_reference)];
+                let fetch_refspec = [::git::RefspecStr::to_forced(&proposed_merge.merge_reference)];
                 self.remote.fetch(&utils::as_str_slice(&fetch_refspec))?;
                 proposed_merge
             }
@@ -276,7 +276,7 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
 
         if push {
             let refspecs: Vec<String> = push_reference.iter()
-                .map(|s| format!("+{}", s))
+                .map(|s| ::git::RefspecStr::to_forced(s))
                 .collect();
             let refspecs_slice: Vec<&str> = refspecs.iter().map(|s| &**s).collect();
             info!("Pushing to {:?}", refspecs);
@@ -296,10 +296,6 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
                 target_reference,
                 base_oid,
                 target_oid)
-    }
-
-    pub fn notes_refspec(&self) -> String {
-        format!("{0}:{0}", self.notes_reference())
     }
 
     pub fn notes_reference(&self) -> String {

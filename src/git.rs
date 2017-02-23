@@ -1,6 +1,7 @@
-use std::vec::Vec;
+use std::fmt;
 use std::path::Path;
 use std::str;
+use std::vec::Vec;
 
 use super::git2;
 use super::RepositoryConfiguration;
@@ -22,6 +23,12 @@ pub struct RemoteHead {
     pub loid: git2::Oid,
     pub name: String,
     pub symref_target: Option<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RefspecStr {
+    force: bool,
+    refspec: String,
 }
 
 impl RemoteHead {
@@ -252,6 +259,7 @@ impl<'repo> Remote<'repo> {
         let callbacks = Repository::remote_callbacks(self.repository.details);
         push_options.remote_callbacks(callbacks);
 
+        debug!("Pushing {:?}", refspecs);
         self.remote.push(refspecs, Some(&mut push_options))
     }
 
@@ -342,6 +350,67 @@ impl<'repo> Remote<'repo> {
     }
 }
 
+impl RefspecStr {
+    pub fn from_str(refspec: &str) -> RefspecStr {
+        let force = refspec.starts_with("+");
+        let refspec = match force {
+            false => refspec.to_string(),
+            true => refspec[1..].to_string(),
+        };
+
+        RefspecStr {
+            force: force,
+            refspec: refspec,
+        }
+    }
+
+    pub fn force(&self) -> bool {
+        self.force
+    }
+
+    pub fn refspec(&self) -> &str {
+        &self.refspec
+    }
+
+    pub fn set_force(&mut self, force: bool) {
+        self.force = force;
+    }
+
+    pub fn to_string(&self) -> String {
+        match self.force {
+            true => format!("+{}", self.refspec).to_string(),
+            false => self.refspec.to_string(),
+        }
+    }
+
+    fn separator_index(&self) -> Option<usize> {
+        self.refspec.find(':')
+    }
+
+    pub fn src(&self) -> String {
+        match self.separator_index() {
+            Some(index) => self.refspec[0..index].to_string(),
+            None => self.refspec.to_string(),
+        }
+    }
+
+    pub fn dest(&self) -> Option<String> {
+        self.separator_index().map(|index| self.refspec[(index + 1)..].to_string())
+    }
+
+    pub fn to_forced(refspec: &str) -> String {
+        let mut refspec = Self::from_str(refspec);
+        refspec.set_force(true);
+        refspec.to_string()
+    }
+}
+
+impl fmt::Display for RefspecStr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -350,7 +419,7 @@ mod tests {
     use git2;
     use git2_raw;
     use tempdir::TempDir;
-    use git::{Repository, Remote};
+    use git::{Repository, Remote, RefspecStr};
 
     fn to_option_str(opt: &Option<String>) -> Option<&str> {
         opt.as_ref().map(|s| &**s)
@@ -517,5 +586,61 @@ mod tests {
         let mut remote = not_err!(repo.remote(None));
 
         is_err!(remote.resolve_target_ref(to_option_str(&target_ref)));
+    }
+
+    #[test]
+    fn refspec_str_constructed_from_str_correctly() {
+        let refspec = "refs/heads/master:refs/remotes/origin/heads/master";
+        let r = RefspecStr::from_str(refspec);
+
+        assert_eq!(refspec, r.refspec());
+        assert_eq!(false, r.force());
+        assert_eq!(refspec, r.to_string());
+        assert_eq!(refspec, format!("{}", r));
+
+        assert_eq!("refs/heads/master", r.src());
+        assert_eq!("refs/remotes/origin/heads/master", not_none!(r.dest()));
+    }
+
+    #[test]
+    fn forced_refspec_str_constructed_from_str_correctly() {
+        let refspec = "refs/heads/master:refs/remotes/origin/heads/master";
+        let forced_refspec = format!("+{}", refspec);
+        let r = RefspecStr::from_str(&forced_refspec);
+
+        assert_eq!(refspec, r.refspec());
+        assert_eq!(true, r.force());
+        assert_eq!(forced_refspec, r.to_string());
+        assert_eq!(forced_refspec, format!("{}", r));
+
+        assert_eq!("refs/heads/master", r.src());
+        assert_eq!("refs/remotes/origin/heads/master", not_none!(r.dest()));
+    }
+
+    #[test]
+    fn refspec_without_dest_works_correctly() {
+        let refspec = "refs/heads/master";
+        let r = RefspecStr::from_str(refspec);
+
+        assert_eq!(refspec, r.refspec());
+        assert_eq!(false, r.force());
+        assert_eq!(refspec, r.to_string());
+        assert_eq!(refspec, format!("{}", r));
+
+        assert_eq!("refs/heads/master", r.src());
+        is_none!(r.dest());
+    }
+
+    #[test]
+    fn refspec_str_forced_works_correctly() {
+        let refspec = "refs/heads/master:refs/remotes/origin/heads/master";
+        let r = RefspecStr::to_forced(refspec);
+        assert_eq!("+refs/heads/master:refs/remotes/origin/heads/master",
+                   r.to_string());
+
+        let refspec = "+refs/heads/master:refs/remotes/origin/heads/master";
+        let r = RefspecStr::to_forced(refspec);
+        assert_eq!("+refs/heads/master:refs/remotes/origin/heads/master",
+                   r.to_string());
     }
 }

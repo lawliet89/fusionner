@@ -10,7 +10,8 @@ and your target default branch.
 These merged commits can then be tested in your CI tool.
 
 Consider the diagram below:
-![Branch Diagram](images/branch_diagram.svg)
+
+![Branch Diagram](https://rawgit.com/lawliet89/fusionner/master/images/branch_diagram.svg)
 
 Normally, tests will be run on the commit labelled `Pull Request`. Ideally, we would like to run tests
 on a merge commit with your `master` branch. This is what `fusionner` does!

@@ -9,6 +9,14 @@ and your target default branch.
 
 These merged commits can then be tested in your CI tool.
 
+Consider the diagram below:
+![Branch Diagram](images/branch_diagram.svg)
+
+Normally, tests will be run on the commit labelled `Pull Request`. Ideally, we would like to run tests
+on a merge commit with your `master` branch. This is what `fusionner` does!
+
+If your `master` branch has moved on, `fusionner` will update the merge commit with the new commits from `master`.
+
 ## Linting
 Code should be formatted with [`rustfmt`](https://github.com/rust-lang-nursery/rustfmt):
 ` cargo fmt -- --write-mode=overwrite`

@@ -1,3 +1,12 @@
+//! Contains the logic to create merge commits.
+//!
+//! Metadata from fusionner are stored as [git object notes](https://git-scm.com/docs/git-notes).
+//! Read [this](https://git-scm.com/blog/2010/08/25/notes.html) for an introduction.
+//! Each commit handled by fusionner will have a `Note` serialised to TOML stored under some configured
+//! namespace. The default is `fusionner`. Each note may contain multiple `Merge`s.
+//!
+//! You can list the notes in your command line by running `git notes --ref fusionner list`.
+
 use std::collections::HashMap;
 use std::fmt;
 use std::vec::Vec;
@@ -11,6 +20,7 @@ static DEFAULT_NERGE_REFERENCE_BASE: &'static str = "refs/fusionner";
 const NOTE_VERSION: u8 = 1;
 static NOTE_ID: &'static str = "fusionner <https://github.com/lawliet89/fusionner>";
 
+/// Contains the logic to create, and manage merge commits
 pub struct Merger<'repo, 'cb> {
     repository: &'repo Repository<'repo>,
     remote: Remote<'repo>,
@@ -19,6 +29,7 @@ pub struct Merger<'repo, 'cb> {
 }
 
 type Merges = HashMap<String, Merge>;
+
 /// A `Note` is stored for each commit on the topic branches' current head
 #[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
 pub struct Note {
@@ -33,6 +44,7 @@ pub struct Note {
     pub merges: Merges,
 }
 
+/// Denotes a single Merge commit for some target reference. Stored in a `Note`.
 #[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
 pub struct Merge {
     /// The OID for the merge commit
@@ -47,21 +59,32 @@ pub struct Merge {
     pub merge_reference: String,
 }
 
-/// Fn(reference: &str, target_reference: &str, oid: git2::Oid, target_oid: git2::Oid) -> String
+/// Type for callback implementing custom merge reference naming.
+/// The meanings for the input arguments are:
+/// `Fn(reference: &str, target_reference: &str, oid: git2::Oid, target_oid: git2::Oid) -> String`
 pub type MergeReferenceNamerCallback<'a> = Fn(&str, &str, git2::Oid, git2::Oid) -> String + 'a;
 
 // TODO: Allow customizing of this, but only in code
-/// The default namer will create a reference at `refs/fusionner/{reference}/{target}`
-/// where `{target}` is the target reference, and `{reference}~ is the reference that is being
-/// merged into target.
-///
-/// _Note: The namer will strip everything until the last `/` so make sure you don't use `/` in your
-/// branch names to avoid collision._
+/// Customise how the merge references are named.
 pub enum MergeReferenceNamer<'cb> {
+    /// The default namer will create a reference at `refs/fusionner/{reference}/{target}`
+    /// where `{target}` is the target reference, and `{reference}~ is the reference that is being
+    /// merged into target.
+    ///
+    /// _Note: The default namer will strip everything until the last `/` so make sure you don't use `/` in your
+    /// branch names to avoid collision._
     Default,
+    /// Use a function that will return the name of the merge reference
+    /// # Example:
+    /// ```
+    /// use fusionner::merger::*;
+    /// let cb = Box::new(move |reference : &str, target_ref : &str, _oid : _, _target_oid : _| {
+    ///                     format!("refs/merge/{}/{}", target_ref, reference)
+    ///                   });
+    /// let namer = MergeReferenceNamer::Custom(cb);
+    /// ```
     Custom(Box<MergeReferenceNamerCallback<'cb>>),
 }
-
 
 /// Enum returned by `Merger::should_merge` depending on the state of affairs
 #[derive(Eq, PartialEq, Clone, Debug)]

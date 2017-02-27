@@ -18,7 +18,7 @@
 //! is intended for using fusionner as a library in your Rust application.
 //!
 
-#![warn(missing_docs)]
+#![deny(missing_docs)]
 #![doc(test(attr(allow(unused_variables), deny(warnings))))]
 
 extern crate git2;
@@ -80,14 +80,16 @@ pub struct RepositoryConfiguration {
     pub signature_email: Option<String>,
 }
 
-/// "Compiled" watch reference
 #[derive(Debug)]
+/// Convenience struct to hold references to watch for changes to be merged into some `target_reference`.
 pub struct WatchReferences {
     regex_set: RegexSet,
     exact_list: Vec<String>,
 }
 
 impl WatchReferences {
+    /// Create watch references based on a list of exact references, or some regular expressions
+    /// that will match to references.
     pub fn new<T: AsRef<str>>(exacts: &[T], regexes: &[T]) -> Result<WatchReferences, regex::Error>
         where T: std::fmt::Display
     {

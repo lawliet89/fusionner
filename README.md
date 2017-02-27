@@ -11,7 +11,7 @@ These merged commits can then be tested in your CI tool.
 
 Consider the diagram below:
 
-![Branch Diagram](https://rawgit.com/lawliet89/fusionner/master/images/branch_diagram.svg)
+<img src="https://cdn.rawgit.com/lawliet89/fusionner/0d517230/images/branch_diagram.svg" style="width: 500px;" />
 
 Normally, tests will be run on the commit labelled `Pull Request`. Ideally, we would like to run tests
 on a merge commit with your `master` branch. This is what `fusionner` does!
@@ -19,13 +19,16 @@ on a merge commit with your `master` branch. This is what `fusionner` does!
 If your `master` branch has moved on, `fusionner` will update the merge commit with the new commits from `master`.
 
 ## Linting
-Code should be formatted with [`rustfmt`](https://github.com/rust-lang-nursery/rustfmt):
-` cargo fmt -- --write-mode=overwrite`
 
-## Test
+Code should be formatted with [`rustfmt`](https://github.com/rust-lang-nursery/rustfmt):
+`cargo fmt -- --write-mode=overwrite`
+
+## Tests
+
 Tests can simply be run with `cargo test`.
 
 ## Usage
+
 fusionner can be included as a crate (i.e. library) in your code, or run directly as an executable.
 
 For usage as an executable, you can see the usage documentation with `cargo run -- --help`.

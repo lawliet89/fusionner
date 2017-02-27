@@ -1,3 +1,17 @@
+//! Contains the logic to create merge commits.
+//!
+//! Metadata from fusionner are stored as [git object notes](https://git-scm.com/docs/git-notes).
+//! Read [this](https://git-scm.com/blog/2010/08/25/notes.html) for an introduction.
+//! Each commit handled by fusionner will have a `Note` serialised to TOML stored under some configured
+//! namespace. The default is `fusionner`. Each note may contain multiple `Merge`s.
+//!
+//! You can list the notes in your command line by running `git notes --ref fusionner list`.
+//!
+//! # Terminology
+//! `oid` and `reference` refer to the OID and Git reference for the commit that you are intending to merge into
+//! some `target_oid` and `target_reference`. The former pair usually corresponds to some topic branch while the
+//! latter pair is usually some default branch (i.e. `master`).
+
 use std::collections::HashMap;
 use std::fmt;
 use std::vec::Vec;
@@ -11,6 +25,7 @@ static DEFAULT_NERGE_REFERENCE_BASE: &'static str = "refs/fusionner";
 const NOTE_VERSION: u8 = 1;
 static NOTE_ID: &'static str = "fusionner <https://github.com/lawliet89/fusionner>";
 
+/// Contains the logic to create, and manage merge commits
 pub struct Merger<'repo, 'cb> {
     repository: &'repo Repository<'repo>,
     remote: Remote<'repo>,
@@ -19,6 +34,7 @@ pub struct Merger<'repo, 'cb> {
 }
 
 type Merges = HashMap<String, Merge>;
+
 /// A `Note` is stored for each commit on the topic branches' current head
 #[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
 pub struct Note {
@@ -33,6 +49,7 @@ pub struct Note {
     pub merges: Merges,
 }
 
+/// Denotes a single Merge commit for some target reference. Stored in a `Note`.
 #[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
 pub struct Merge {
     /// The OID for the merge commit
@@ -47,41 +64,92 @@ pub struct Merge {
     pub merge_reference: String,
 }
 
-/// Fn(reference: &str, target_reference: &str, oid: git2::Oid, target_oid: git2::Oid) -> String
+/// Type for callback implementing custom merge reference naming.
+/// The meanings for the input arguments are:
+/// `Fn(reference: &str, target_reference: &str, oid: git2::Oid, target_oid: git2::Oid) -> String`
 pub type MergeReferenceNamerCallback<'a> = Fn(&str, &str, git2::Oid, git2::Oid) -> String + 'a;
 
 // TODO: Allow customizing of this, but only in code
-/// The default namer will create a reference at `refs/fusionner/{reference}/{target}`
-/// where `{target}` is the target reference, and `{reference}~ is the reference that is being
-/// merged into target.
-///
-/// _Note: The namer will strip everything until the last `/` so make sure you don't use `/` in your
-/// branch names to avoid collision._
+/// Customise how the merge references are named.
 pub enum MergeReferenceNamer<'cb> {
+    /// The default namer will create a reference at `refs/fusionner/{reference}/{target}`
+    /// where `{target}` is the target reference, and `{reference}~ is the reference that is being
+    /// merged into target.
+    ///
+    /// _Note: The default namer will strip everything until the last `/` so make sure you don't use `/` in your
+    /// branch names to avoid collision._
     Default,
+    /// Use a function that will return the name of the merge reference
+    /// # Example:
+    /// ```
+    /// use fusionner::merger::*;
+    /// let cb = Box::new(move |reference : &str, target_ref : &str, _oid : _, _target_oid : _| {
+    ///                     format!("refs/merge/{}/{}", target_ref, reference)
+    ///                   });
+    /// let namer = MergeReferenceNamer::Custom(cb);
+    /// ```
     Custom(Box<MergeReferenceNamerCallback<'cb>>),
 }
-
 
 /// Enum returned by `Merger::should_merge` depending on the state of affairs
 #[derive(Eq, PartialEq, Clone, Debug)]
 pub enum ShouldMergeResult {
+    /// A merge is required. This variant includes a `Note` for the commit, if one exists.
+    /// If one exists, a `Merge` should be appended to this. Otherwise, a new `Note` with one `Merge` should be
+    /// created
     Merge(Option<Note>),
+    /// An up to date (i.e. target reference OID matches) merge commit is stored in the `Note` with the target
+    /// reference exists. Nothing to do.
     ExistingMergeInSameTargetReference(Note),
+    /// An up to date (i.e. target reference OID matches) merge commit is stored in the `Note`. The `proposed_merge`
+    /// should be merged into the note
     ExistingMergeInDifferentTargetReference {
+        /// Note found for commit
         note: Note,
+        /// All the merges for this commit
         merges: Vec<Merge>,
+        /// A proposed `Merge` that should be appended to the `Note`
         proposed_merge: Merge,
     },
 }
 
 impl<'repo, 'cb> Merger<'repo, 'cb> {
+    /// Create a new merger.
+    ///
+    /// Provide the name of the remote to use, or the default (usually `origin`) will be used.
+    ///
+    /// # Examples
+    /// ```
+    /// use fusionner::RepositoryConfiguration;
+    /// use fusionner::git::Repository;
+    /// use fusionner::merger::*;
+    ///
+    /// let configuration = RepositoryConfiguration {
+    ///     uri: "https://github.com/lawliet89/fusionner.git".to_string(),
+    ///     checkout_path: "/tmp/checkout".to_string(),
+    ///     fetch_refspecs: vec![],
+    ///     push_refspecs: vec![],
+    ///     username: None,
+    ///     password: None,
+    ///     key: None,
+    ///     key_passphrase: None,
+    ///     signature_name: None,
+    ///     signature_email: None,
+    /// };
+    ///
+    /// let repo = Repository::clone_or_open(&configuration).unwrap();
+    /// let cb = Box::new(move |reference : &str, target_ref : &str, _oid : _, _target_oid : _| {
+    ///                     format!("refs/merge/{}/{}", target_ref, reference)
+    ///                   });
+    /// let namer = MergeReferenceNamer::Custom(cb);
+    /// let merger = Merger::new(&repo, None, None, Some(namer));
+    /// ```
     pub fn new(repository: &'repo Repository<'repo>,
-               remote: Option<&str>,
+               remote_name: Option<&str>,
                namespace: Option<&str>,
                merge_reference_namer: Option<MergeReferenceNamer<'cb>>)
                -> Result<Merger<'repo, 'cb>, git2::Error> {
-        let remote = repository.remote(remote)?;
+        let remote = repository.remote(remote_name)?;
         Ok(Merger {
             repository: repository,
             remote: remote,
@@ -91,6 +159,7 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
     }
 
     /// Add refspecs to a remote to fetch/push commit notes, specific for fusionner
+    /// This is based on the `namespace` provided when creating a new `Merger`.
     pub fn add_note_refspecs(&self) -> Result<(), git2::Error> {
         let refspec = format!("+{0}:{0}", self.notes_reference());
 
@@ -98,6 +167,7 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
         self.remote.add_refspec(&refspec, git2::Direction::Push)
     }
 
+    /// Fetch notes based on the `namespace` provided when creating a new `Merger` from the remote configured
     pub fn fetch_notes(&mut self) -> Result<(), git2::Error> {
         let refs = [format!("+{0}:{0}", self.notes_reference())];
 
@@ -113,7 +183,7 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
             .and_then(|note| utils::deserialize_toml(&note).map_err(|e| git_err!(&e)))
     }
 
-    /// Returns OID of note
+    /// Add note for the OID. Will serialise to TOML before storage. Returns OID of note.
     pub fn add_note(&self, note: &Note, oid: git2::Oid) -> Result<git2::Oid, git2::Error> {
         let signature = self.repository.signature()?;
         let serialized_note = utils::serialize_toml(&note).map_err(|e| git_err!(&e))?;
@@ -126,7 +196,19 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
                                         true)
     }
 
-    /// Determine if a merge should be made
+    /// Determine if a merge should be made, based on the rules below.
+    ///
+    /// In general, you should prefer to use the convenience function `check_and_merge` instead which will do
+    /// everything for you. For usage of this function, refer to the source code of `check_and_merge`.
+    ///
+    /// 1. Find the note for the `oid` in question.
+    /// 2. If no note could be found, return `ShouldMergeResult::Merge(None)`.
+    /// 3. If a note could be found, find from its list of `Merge`s if any merge with the `target_oid` could be found.
+    /// 4. If none could be found, return `ShouldMergeResult::Merge(Some(note))` where `note` is the `Note` found.
+    /// 5. If the found `Merge` has its `target_reference` match, then we will return
+    /// `ShouldMergeResult::ExistingMergeInSameTargetReference`.
+    /// 6. Otherwise, we will construct a `proposed_merge` and return
+    /// `ShouldMergeResult::ExistingMergeInDifferentTargetReference`.
     pub fn should_merge(&self,
                         oid: git2::Oid,
                         target_oid: git2::Oid,
@@ -169,7 +251,11 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
         }
     }
 
-    /// Performs a merge and return a `Merge` entry intended for `oid`
+    /// Performs a merge and return a `Merge` entry intended for `oid`. You should then add the `Merge` into the
+    /// `Note` for `oid`.
+    ///
+    /// In general, you should prefer to use the convenience function `check_and_merge` instead which will do
+    /// everything for you. For usage of this function, refer to the source code of `check_and_merge`.
     pub fn merge(&self,
                  oid: git2::Oid,
                  target_oid: git2::Oid,
@@ -216,9 +302,9 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
     }
 
 
-    /// Convenience method to check if a merge is required, and merge if needed.
-    /// Will fetch remote merge references.
-    /// Will push, if desired
+    /// Convenience function to check if a merge is required, and merge if needed.
+    /// Will fetch remote merge references. Will push, if desired.
+    /// This function calls both `should_merge` and `merge`.
     pub fn check_and_merge(&mut self,
                            oid: git2::Oid,
                            target_oid: git2::Oid,
@@ -302,12 +388,15 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
                 target_oid)
     }
 
+    /// Returns the reference for the notes that fusionner will create, based on the namespace provided when
+    /// creating a new `Merger`.
     pub fn notes_reference(&self) -> String {
         format!("refs/notes/{}", self.namespace)
     }
 }
 
 impl Note {
+    /// Create a new `Note` with the list of `Merges`.
     pub fn new(merges: Merges) -> Note {
         Note {
             _note_origin: NOTE_ID.to_string(),
@@ -316,15 +405,18 @@ impl Note {
         }
     }
 
+    /// Convenience function to create a new `Note` with one `Merge`.
     pub fn new_with_merge(merge: Merge) -> Note {
         Self::new([(merge.target_parent_reference.to_string(), merge)].iter().cloned().collect())
     }
 
-    /// Returns the previous Merge if it existed
+    /// Appends `Merge` to the `Note`, preserving the invariant that one `Merge` exists per `target_reference`.
+    /// Returns the previous `Merge` if it existed
     pub fn append_with_merge(&mut self, merge: Merge) -> Option<Merge> {
         self.merges.insert(merge.target_parent_reference.to_string(), merge)
     }
 
+    /// Find `Merge`s in the note tha corresponds to `target_oid`, regardless of their `target_reference`.
     pub fn find_matching_merges(&self, target_oid: git2::Oid) -> HashMap<&String, &Merge> {
         self.merges
             .iter()
@@ -340,6 +432,7 @@ impl Note {
 }
 
 impl Merge {
+    /// Creates a new `Merge`.
     pub fn new(merge_oid: git2::Oid,
                target_parent_oid: git2::Oid,
                target_parent_reference: &str,
@@ -357,6 +450,7 @@ impl Merge {
 }
 
 impl<'cb> MergeReferenceNamer<'cb> {
+    /// Returns the name of the merge reference based on the rules provided.
     pub fn resolve(&self, reference: &str, target_reference: &str, oid: git2::Oid, target_oid: git2::Oid) -> String {
         match self {
             &MergeReferenceNamer::Default => {
@@ -369,12 +463,14 @@ impl<'cb> MergeReferenceNamer<'cb> {
         }
     }
 
-    pub fn reference(&self) -> String {
+    /// Return the "based" of the reference used in the `Default` namer
+    fn default_reference_base() -> String {
         DEFAULT_NERGE_REFERENCE_BASE.to_string()
     }
 
+    /// Add the refspecs used in the `Default` namer to the remote.
     pub fn add_default_refspecs(remote: &Remote) -> Result<(), git2::Error> {
-        let src = MergeReferenceNamer::Default.reference();
+        let src = MergeReferenceNamer::default_reference_base();
         let refspec = remote.generate_refspec(&src, true).map_err(|e| git_err!(&e))?;
         remote.add_refspec(&refspec, git2::Direction::Push)
     }

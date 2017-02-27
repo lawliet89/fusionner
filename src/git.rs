@@ -1,3 +1,7 @@
+//! Convenience wrapper around the [`git2-rs`](https://github.com/alexcrichton/git2-rs) library
+//!
+//! In particular, you would want to start with the `git::Repository` struct.
+
 use std::fmt;
 use std::path::Path;
 use std::str;
@@ -6,18 +10,69 @@ use std::vec::Vec;
 use super::git2;
 use super::RepositoryConfiguration;
 
+/// Repository struct to wrap around `git2::Repository`
+///
+/// # Examples
+/// ```
+/// use fusionner::RepositoryConfiguration;
+/// use fusionner::git::Repository;
+///
+/// let configuration = RepositoryConfiguration {
+///     uri: "https://github.com/lawliet89/fusionner.git".to_string(),
+///     checkout_path: "/tmp/checkout".to_string(),
+///     fetch_refspecs: vec![],
+///     push_refspecs: vec![],
+///     username: None,
+///     password: None,
+///     key: None,
+///     key_passphrase: None,
+///     signature_name: None,
+///     signature_email: None,
+/// };
+///
+/// let repo = Repository::clone_or_open(&configuration).unwrap();
+/// ```
 pub struct Repository<'repo> {
+    /// The repository struct that is wrapped. Use this to perform operations directly on the repository
     pub repository: git2::Repository,
     details: &'repo RepositoryConfiguration,
 }
 
+/// Wraps around a `git2::Remote` struct and offers convenience methods
+///
+/// # Examples
+/// ```
+/// use fusionner::RepositoryConfiguration;
+/// use fusionner::git::Repository;
+///
+/// let configuration = RepositoryConfiguration {
+///     uri: "https://github.com/lawliet89/fusionner.git".to_string(),
+///     checkout_path: "/tmp/checkout".to_string(),
+///     fetch_refspecs: vec![],
+///     push_refspecs: vec![],
+///     username: None,
+///     password: None,
+///     key: None,
+///     key_passphrase: None,
+///     signature_name: None,
+///     signature_email: None,
+/// };
+///
+/// let repo = Repository::clone_or_open(&configuration).unwrap();
+/// let remote = repo.remote(None);
+/// ```
 pub struct Remote<'repo> {
+    /// The wrapped remote
     pub remote: git2::Remote<'repo>,
     repository: &'repo Repository<'repo>,
 }
 
+/// Cloned from a [`git2::RemoteHead`](https://docs.rs/git2/0.6/git2/struct.RemoteHead.html)
+/// without the associated lifetime. The fields correspond one to one with `git2::RemoteHead`.
 #[derive(Clone, Debug)]
+#[allow(missing_docs)] // not documented in libgit2 :(
 pub struct RemoteHead {
+    /// Flag if this is available locally.
     pub is_local: bool,
     pub oid: git2::Oid,
     pub loid: git2::Oid,
@@ -25,6 +80,24 @@ pub struct RemoteHead {
     pub symref_target: Option<String>,
 }
 
+/// Wraps around a Refspec string to provide convenience method
+///
+/// # Examples
+/// ```
+/// use fusionner::git::RefspecStr;
+///
+/// let refspec = "refs/heads/master:refs/remotes/origin/heads/master";
+/// let forced_refspec = format!("+{}", refspec);
+/// let r = RefspecStr::from_str(&forced_refspec);
+///
+/// assert_eq!(refspec, r.refspec());
+/// assert_eq!(true, r.force());
+/// assert_eq!(forced_refspec, r.to_string());
+/// assert_eq!(forced_refspec, format!("{}", r));
+///
+/// assert_eq!("refs/heads/master", r.src());
+/// assert_eq!("refs/remotes/origin/heads/master", r.dest().unwrap());
+/// ```
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RefspecStr {
     force: bool,
@@ -32,6 +105,10 @@ pub struct RefspecStr {
 }
 
 impl RemoteHead {
+    /// Returns a `&str` representing the reference target for this remote head.
+    /// If the head is a symbolic reference, this method will resolve it.
+    ///
+    /// For example, a remote head `HEAD` will possible resolve to `refs/heads/master`.
     pub fn flatten(&self) -> &str {
         match self.symref_target {
             Some(ref s) => s,
@@ -39,12 +116,44 @@ impl RemoteHead {
         }
     }
 
+    /// Returns a `String` representing the reference target for this remote head.
+    /// If the head is a symbolic reference, this method will resolve it.
+    ///
+    /// For example, a remote head `HEAD` will possible resolve to `refs/heads/master`.
     pub fn flatten_clone(&self) -> String {
         self.flatten().to_string()
     }
 }
 
 impl<'repo> Repository<'repo> {
+    /// Create a new struct based off a `git2::Repository` and the corresponding configuration
+    /// # Examples
+    /// ```
+    /// extern crate git2;
+    /// extern crate fusionner;
+    ///
+    /// use fusionner::RepositoryConfiguration;
+    /// use fusionner::git::Repository;
+    ///
+    /// # fn main() {
+    /// let configuration = RepositoryConfiguration {
+    ///     uri: "https://github.com/lawliet89/fusionner.git".to_string(),
+    ///     checkout_path: "/tmp/checkout".to_string(),
+    ///     fetch_refspecs: vec![],
+    ///     push_refspecs: vec![],
+    ///     username: None,
+    ///     password: None,
+    ///     key: None,
+    ///     key_passphrase: None,
+    ///     signature_name: None,
+    ///     signature_email: None,
+    /// };
+    ///
+    /// let repo = git2::Repository::open(&configuration.checkout_path)
+    ///     .and_then(|repo| Ok(Repository::new(repo, &configuration)))
+    ///     .unwrap();
+    /// # }
+    /// ```
     pub fn new(repository: git2::Repository, configuration: &'repo RepositoryConfiguration) -> Repository<'repo> {
         Repository {
             repository: repository,
@@ -52,6 +161,8 @@ impl<'repo> Repository<'repo> {
         }
     }
 
+    /// Convenience method to create a new struct by first attempting to open a repository at the checkout path
+    /// configured, and failing that will attempt to clone from the URI configured.
     pub fn clone_or_open(repo_details: &'repo RepositoryConfiguration) -> Result<Repository<'repo>, git2::Error> {
         Repository::open(repo_details).or_else(|err| if err.code() == git2::ErrorCode::NotFound {
             info!("Repository not found at {} -- cloning",
@@ -62,11 +173,14 @@ impl<'repo> Repository<'repo> {
         })
     }
 
+    /// Convenience method to create a new struct by attempting to open a repository at the checkout path configured
     pub fn open(repo_details: &'repo RepositoryConfiguration) -> Result<Repository<'repo>, git2::Error> {
         info!("Opening repository at {}", &repo_details.checkout_path);
         git2::Repository::open(&repo_details.checkout_path).and_then(|repo| Ok(Repository::new(repo, repo_details)))
     }
 
+    /// Convenience method to create a new struct by attempting to clone a repository at a uri to the
+    /// checkout path configured
     pub fn clone(repo_details: &'repo RepositoryConfiguration) -> Result<Repository<'repo>, git2::Error> {
         let remote_callbacks = Repository::remote_callbacks(repo_details);
 
@@ -96,11 +210,11 @@ impl<'repo> Repository<'repo> {
         remote_callbacks
     }
 
-    pub fn resolve_credentials(repo_details: &RepositoryConfiguration,
-                               _uri: &str,
-                               username: Option<&str>,
-                               cred_type: git2::CredentialType)
-                               -> Result<git2::Cred, git2::Error> {
+    fn resolve_credentials(repo_details: &RepositoryConfiguration,
+                           _uri: &str,
+                           username: Option<&str>,
+                           cred_type: git2::CredentialType)
+                           -> Result<git2::Cred, git2::Error> {
         let username = username.or_else(|| match repo_details.username {
             Some(ref username) => Some(username),
             None => None,
@@ -127,7 +241,7 @@ impl<'repo> Repository<'repo> {
         }
     }
 
-    pub fn transfer_progress_log(progress: git2::Progress) -> bool {
+    fn transfer_progress_log(progress: git2::Progress) -> bool {
         // TODO: Maybe throttle this, or update UI
         if progress.received_objects() == progress.total_objects() {
             debug!("Resolving deltas {}/{}\r",
@@ -143,12 +257,12 @@ impl<'repo> Repository<'repo> {
         true
     }
 
-    pub fn sideband_progress_log(data: &[u8]) -> bool {
+    fn sideband_progress_log(data: &[u8]) -> bool {
         debug!("remote: {}", str::from_utf8(data).unwrap_or(""));
         true
     }
 
-    pub fn update_tips_log(refname: &str, a: git2::Oid, b: git2::Oid) -> bool {
+    fn update_tips_log(refname: &str, a: git2::Oid, b: git2::Oid) -> bool {
         if a.is_zero() {
             debug!("[new]     {:20} {}", b, refname);
         } else {
@@ -157,6 +271,7 @@ impl<'repo> Repository<'repo> {
         true
     }
 
+    /// Returns a `Remote` struct for the remote with the given name. Defaults to the `origin` remote.
     pub fn remote(&self, remote: Option<&str>) -> Result<Remote, git2::Error> {
         Ok(Remote {
             remote: self.repository.find_remote(&Repository::remote_name_or_default(remote))?,
@@ -164,10 +279,13 @@ impl<'repo> Repository<'repo> {
         })
     }
 
-    pub fn remote_name_or_default(remote: Option<&str>) -> String {
+    fn remote_name_or_default(remote: Option<&str>) -> String {
         remote.unwrap_or("origin").to_string()
     }
 
+    /// Returns a signature struct for use in operations like commit.
+    /// Will first check if this is available in the configuration. If not, we will attempt
+    /// to find the global git configured signature. Failing that, we will use some default fusionner signature
     pub fn signature(&self) -> Result<git2::Signature, git2::Error> {
         if self.details.signature_name.is_some() && self.details.signature_email.is_some() {
             return git2::Signature::now(self.details.signature_name.as_ref().unwrap(),
@@ -189,18 +307,22 @@ impl<'repo> Remote<'repo> {
         self.remote.connect_auth(git2::Direction::Fetch, Some(callbacks), None)
     }
 
+    /// Disconnect from the remote
     pub fn disconnect(&mut self) {
         self.remote.disconnect();
     }
 
+    /// Returns the name of a remote. Will return `None` for annonymous remotes
     pub fn name(&self) -> Option<&str> {
         self.remote.name()
     }
 
+    /// Returns the list of refspecs configured for the remote
     pub fn refspecs(&self) -> git2::Refspecs {
         self.remote.refspecs()
     }
 
+    /// Performs a `git ls-remote` operation
     pub fn remote_ls(&mut self) -> Result<Vec<RemoteHead>, git2::Error> {
         let connection = self.connect()?;
         info!("Retrieving remote references `git ls-remote`");
@@ -218,7 +340,7 @@ impl<'repo> Remote<'repo> {
             .collect())
     }
 
-    // Get the remote reference of renote HEAD (i.e. default branch)
+    /// Get the remote reference of renote HEAD (i.e. default branch)
     pub fn head(&mut self) -> Result<Option<String>, git2::Error> {
         let connection = self.connect()?;
         info!("Retrieving remote references `git ls-remote`");
@@ -226,14 +348,15 @@ impl<'repo> Remote<'repo> {
         Ok(Remote::resolve_head(heads))
     }
 
-    // Resolve the remote HEAD (i.e. default branch) from a list of heads
-    // and return the remote reference
+    /// Resolve the remote HEAD (i.e. default branch) from a list of heads
+    /// and return the remote reference
     pub fn resolve_head(heads: &[git2::RemoteHead]) -> Option<String> {
         heads.iter()
             .find(|head| head.name() == "HEAD" && head.symref_target().is_some())
             .and_then(|head| Some(head.symref_target().unwrap().to_string()))
     }
 
+    /// Fetch the list of refspecs from the remote.
     pub fn fetch(&mut self, refspecs: &[&str]) -> Result<(), git2::Error> {
         let mut fetch_options = git2::FetchOptions::new();
         let callbacks = Repository::remote_callbacks(self.repository.details);
@@ -254,6 +377,7 @@ impl<'repo> Remote<'repo> {
         Ok(())
     }
 
+    /// Attempt to push to the remote for the given list of refspecs
     pub fn push(&mut self, refspecs: &[&str]) -> Result<(), git2::Error> {
         let mut push_options = git2::PushOptions::new();
         let callbacks = Repository::remote_callbacks(self.repository.details);
@@ -279,6 +403,7 @@ impl<'repo> Remote<'repo> {
         Ok(format!("{}{}:{}", force_flag, src, dest))
     }
 
+    /// Add refspec for the remote, if they don't exist.
     pub fn add_refspec(&self, refspec: &str, direction: git2::Direction) -> Result<(), git2::Error> {
         let remote_name = self.name().ok_or(git2::Error::from_str("Un-named remote used"))?;
 
@@ -299,6 +424,7 @@ impl<'repo> Remote<'repo> {
         }
     }
 
+    /// Convenience method to add multiple refspecs at once
     pub fn add_refspecs(&self, refspecs: &[&str], direction: git2::Direction) -> Result<(), git2::Error> {
         for refspec in refspecs {
             self.add_refspec(refspec, direction)?
@@ -306,6 +432,8 @@ impl<'repo> Remote<'repo> {
         Ok(())
     }
 
+    /// Given a reference string, attempt to find a matching remote reference.
+    /// If `None` is provided, will attempt to resolve the remote's `HEAD` (usually `refs/heads/master`)
     pub fn resolve_target_ref(&mut self, target_ref: Option<&str>) -> Result<String, git2::Error> {
         match target_ref {
             Some(reference) if reference != "HEAD" => {
@@ -329,6 +457,7 @@ impl<'repo> Remote<'repo> {
         }
     }
 
+    /// Find if a refspec exists in a list of refspecs, usually retrieved from a repository or a remote
     pub fn find_matching_refspec<'a>(mut refspecs: git2::Refspecs<'a>,
                                      direction: git2::Direction,
                                      refspec: &str)
@@ -339,6 +468,7 @@ impl<'repo> Remote<'repo> {
         })
     }
 
+    /// Convenience method to check if two `git2::Direction` enums are equal
     pub fn direction_eq(left: &git2::Direction, right: &git2::Direction) -> bool {
         use git2::Direction::*;
 
@@ -351,6 +481,7 @@ impl<'repo> Remote<'repo> {
 }
 
 impl RefspecStr {
+    /// Construct this struct from a `&str`.
     pub fn from_str(refspec: &str) -> RefspecStr {
         let force = refspec.starts_with("+");
         let refspec = match force {
@@ -364,18 +495,22 @@ impl RefspecStr {
         }
     }
 
+    /// Check if the refspec has the force flag set
     pub fn force(&self) -> bool {
         self.force
     }
 
+    /// Return the raw refspec (without the `+`)
     pub fn refspec(&self) -> &str {
         &self.refspec
     }
 
+    /// Set the refspec to be `forced`. i.e. prepend a `+`
     pub fn set_force(&mut self, force: bool) {
         self.force = force;
     }
 
+    /// Converts the struct to a String.
     pub fn to_string(&self) -> String {
         match self.force {
             true => format!("+{}", self.refspec).to_string(),
@@ -387,6 +522,7 @@ impl RefspecStr {
         self.refspec.find(':')
     }
 
+    /// Returns the `src` part of the refspec
     pub fn src(&self) -> String {
         match self.separator_index() {
             Some(index) => self.refspec[0..index].to_string(),
@@ -394,10 +530,20 @@ impl RefspecStr {
         }
     }
 
+    /// Returns the `dest` part of the refspec if it exists
     pub fn dest(&self) -> Option<String> {
         self.separator_index().map(|index| self.refspec[(index + 1)..].to_string())
     }
 
+    /// Convenience function to take a refspec `&str` and turn it into a forced version
+    /// # Examples
+    /// ```
+    /// use fusionner::git::RefspecStr;
+    ///
+    /// let refspec = "refs/heads/master:refs/remote/origin/heads/master";
+    /// let forced = RefspecStr::to_forced(refspec);
+    /// assert_eq!("+refs/heads/master:refs/remote/origin/heads/master", forced);
+    /// ```
     pub fn to_forced(refspec: &str) -> String {
         let mut refspec = Self::from_str(refspec);
         refspec.set_force(true);

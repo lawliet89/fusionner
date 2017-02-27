@@ -1,3 +1,26 @@
+//! [`fusionner`](https://github.com/lawliet89/fusionner) is French for merge.
+//! This tool exists to create merge commits between your watched topic branches
+//! and your target default branch.
+//!
+//! These merged commits can then be tested in your CI tool.
+// Consider the diagram below:
+//!
+//! <img src="https://cdn.rawgit.com/lawliet89/fusionner/0d517230/images/branch_diagram.svg" style="width: 500px;" />
+//!
+//! Normally, tests will be run on the commit labelled `Pull Request`. Ideally, we would like to run tests
+//! on a merge commit with your `master` branch. This is what `fusionner` does!
+//!
+//! If your `master` branch has moved on, `fusionner` will update the merge commit with the new commits from `master`.
+//!
+//! ## Usage
+//!
+//! If you are looking for usage, refer to the [repository](https://github.com/lawliet89/fusionner). This documentation
+//! is intended for using fusionner as a library in your Rust application.
+//!
+
+#![deny(missing_docs)]
+#![doc(test(attr(allow(unused_variables), deny(warnings))))]
+
 extern crate git2;
 extern crate libgit2_sys as git2_raw;
 #[macro_use]
@@ -57,14 +80,16 @@ pub struct RepositoryConfiguration {
     pub signature_email: Option<String>,
 }
 
-/// "Compiled" watch reference
 #[derive(Debug)]
+/// Convenience struct to hold references to watch for changes to be merged into some `target_reference`.
 pub struct WatchReferences {
     regex_set: RegexSet,
     exact_list: Vec<String>,
 }
 
 impl WatchReferences {
+    /// Create watch references based on a list of exact references, or some regular expressions
+    /// that will match to references.
     pub fn new<T: AsRef<str>>(exacts: &[T], regexes: &[T]) -> Result<WatchReferences, regex::Error>
         where T: std::fmt::Display
     {

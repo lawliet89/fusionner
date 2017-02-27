@@ -14,12 +14,17 @@ use super::RepositoryConfiguration;
 ///
 /// # Examples
 /// ```
+/// extern crate tempdir;
+/// extern crate fusionner;
 /// use fusionner::RepositoryConfiguration;
 /// use fusionner::git::Repository;
+/// use tempdir::TempDir;
 ///
+/// # fn main() {
+/// let td = TempDir::new("checkout").unwrap();
 /// let configuration = RepositoryConfiguration {
 ///     uri: "https://github.com/lawliet89/fusionner.git".to_string(),
-///     checkout_path: "/tmp/checkout".to_string(),
+///     checkout_path: td.path().to_str().unwrap().to_string(),
 ///     fetch_refspecs: vec![],
 ///     push_refspecs: vec![],
 ///     username: None,
@@ -31,6 +36,7 @@ use super::RepositoryConfiguration;
 /// };
 ///
 /// let repo = Repository::clone_or_open(&configuration).unwrap();
+/// # }
 /// ```
 pub struct Repository<'repo> {
     /// The repository struct that is wrapped. Use this to perform operations directly on the repository
@@ -42,12 +48,17 @@ pub struct Repository<'repo> {
 ///
 /// # Examples
 /// ```
+/// extern crate tempdir;
+/// extern crate fusionner;
 /// use fusionner::RepositoryConfiguration;
 /// use fusionner::git::Repository;
+/// use tempdir::TempDir;
 ///
+/// # fn main() {
+/// let td = TempDir::new("checkout").unwrap();
 /// let configuration = RepositoryConfiguration {
 ///     uri: "https://github.com/lawliet89/fusionner.git".to_string(),
-///     checkout_path: "/tmp/checkout".to_string(),
+///     checkout_path: td.path().to_str().unwrap().to_string(),
 ///     fetch_refspecs: vec![],
 ///     push_refspecs: vec![],
 ///     username: None,
@@ -60,6 +71,7 @@ pub struct Repository<'repo> {
 ///
 /// let repo = Repository::clone_or_open(&configuration).unwrap();
 /// let remote = repo.remote(None);
+/// # }
 /// ```
 pub struct Remote<'repo> {
     /// The wrapped remote
@@ -131,14 +143,17 @@ impl<'repo> Repository<'repo> {
     /// ```
     /// extern crate git2;
     /// extern crate fusionner;
+    /// extern crate tempdir;
     ///
     /// use fusionner::RepositoryConfiguration;
     /// use fusionner::git::Repository;
+    /// use tempdir::TempDir;
     ///
     /// # fn main() {
+    /// let td = TempDir::new("checkout").unwrap();
     /// let configuration = RepositoryConfiguration {
     ///     uri: "https://github.com/lawliet89/fusionner.git".to_string(),
-    ///     checkout_path: "/tmp/checkout".to_string(),
+    ///     checkout_path: td.path().to_str().unwrap().to_string(),
     ///     fetch_refspecs: vec![],
     ///     push_refspecs: vec![],
     ///     username: None,
@@ -149,7 +164,7 @@ impl<'repo> Repository<'repo> {
     ///     signature_email: None,
     /// };
     ///
-    /// let repo = git2::Repository::open(&configuration.checkout_path)
+    /// let repo = git2::Repository::clone(&configuration.uri, &configuration.checkout_path)
     ///     .and_then(|repo| Ok(Repository::new(repo, &configuration)))
     ///     .unwrap();
     /// # }

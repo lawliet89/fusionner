@@ -116,7 +116,6 @@ impl FromStr for Password {
     }
 }
 
-
 #[derive(Debug)]
 /// Convenience struct to hold references to watch for changes to be merged into some `target_reference`.
 pub struct WatchReferences {

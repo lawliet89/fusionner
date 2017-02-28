@@ -86,12 +86,15 @@ pub struct RepositoryConfiguration {
 
 #[derive(RustcDecodable, RustcEncodable, PartialOrd, Eq, PartialEq, Clone)]
 /// A tuple struct to hold passwords. Implements `fmt::Display` and `fmt::Debug` to not leak during printing
-pub struct Password(pub String);
+pub struct Password {
+    /// The wrapped password string
+    pub password: String,
+}
 
 impl Password {
     /// Create a new password struct
     pub fn new(password: &str) -> Password {
-        Password(password.to_string())
+        Password { password: password.to_string() }
     }
 }
 
@@ -111,7 +114,7 @@ impl Deref for Password {
     type Target = str;
 
     fn deref(&self) -> &str {
-        &*self.0
+        &*self.password
     }
 }
 
@@ -119,7 +122,7 @@ impl FromStr for Password {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Password, ParseError> {
-        Ok(Password(s.to_string()))
+        Ok(Password::new(s))
     }
 }
 

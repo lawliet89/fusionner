@@ -1,8 +1,13 @@
+interval = 60
+
 [repository]
 uri = "https://github.com/lawliet89/fusionner.git"
 checkout_path = "target/test_repo"
-remote = "origin"
 fetch_refspecs = ["+refs/pull/*:refs/remotes/origin/pull/*"]
+username = "john doe"
+password = { password = "P@ssword!" }
+key = "/home/user/.ssh/key"
+key_passphrase = { password = "Such a password" }
 notes_namespace = "fusionner-test"
 signature_name = "Foobar"
 signature_email = "foo@bar.xyz"

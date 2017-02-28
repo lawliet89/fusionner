@@ -305,10 +305,28 @@ fn to_option_str(opt: &Option<String>) -> Option<&str> {
 
 #[cfg(test)]
 mod tests {
-    use Config;
+    use {Config, Password};
+    use fusionner::RepositoryConfiguration;
 
     #[test]
     fn config_reading_smoke_test() {
-        not_err!(Config::read_config("tests/fixtures/config.toml"));
+        let config = not_err!(Config::read_config("tests/fixtures/config.toml"));
+        let expected_config = Config {
+            interval: Some(60),
+            repository: RepositoryConfiguration {
+                uri: "https://github.com/lawliet89/fusionner.git".to_string(),
+                checkout_path: "target/test_repo".to_string(),
+                fetch_refspecs: vec!["+refs/pull/*:refs/remotes/origin/pull/*".to_string()],
+                push_refspecs: vec![],
+                username: Some("john doe".to_string()),
+                password: Some(Password::new("P@ssword!")),
+                key: Some("/home/user/.ssh/key".to_string()),
+                key_passphrase: Some(Password::new("Such a password")),
+                signature_name: Some("Foobar".to_string()),
+                signature_email: Some("foo@bar.xyz".to_string()),
+            }
+        };
+
+        assert_eq!(config, expected_config);
     }
 }

@@ -44,6 +44,10 @@ pub mod merger;
 pub mod git;
 
 use std::collections::HashSet;
+use std::fmt;
+use std::ops::Deref;
+use std::str::FromStr;
+use std::string::ParseError;
 use std::vec::Vec;
 
 use regex::RegexSet;
@@ -66,18 +70,60 @@ pub struct RepositoryConfiguration {
     /// Username to authenticate with the remote
     pub username: Option<String>,
     /// Password to authenticate with the remote
-    pub password: Option<String>,
+    pub password: Option<Password>,
     /// Path to private key to authenticate with the remote. If the remote requrests for a key and
     /// this is not specified, we will try to request the key from ssh-agent
     pub key: Option<String>,
     /// Passphrase to the private key for authentication
-    pub key_passphrase: Option<String>,
+    pub key_passphrase: Option<Password>,
     /// The name to create merge commits under.
     /// If unspecified, will use the global configuration in Git. Otherwise we will use some generic one
     pub signature_name: Option<String>,
     /// The email to create merge commits under.
     /// If unspecified, will use the global configuration in Git. Otherwise we will use some generic one
     pub signature_email: Option<String>,
+}
+
+#[derive(RustcDecodable, RustcEncodable, PartialOrd, Eq, PartialEq, Clone)]
+/// A tuple struct to hold passwords. Implements `fmt::Display` and `fmt::Debug` to not leak during printing
+pub struct Password {
+    /// The wrapped password string
+    pub password: String,
+}
+
+impl Password {
+    /// Create a new password struct
+    pub fn new(password: &str) -> Password {
+        Password { password: password.to_string() }
+    }
+}
+
+impl fmt::Display for Password {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "***")
+    }
+}
+
+impl fmt::Debug for Password {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "***")
+    }
+}
+
+impl Deref for Password {
+    type Target = str;
+
+    fn deref(&self) -> &str {
+        &*self.password
+    }
+}
+
+impl FromStr for Password {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Password, ParseError> {
+        Ok(Password::new(s))
+    }
 }
 
 #[derive(Debug)]

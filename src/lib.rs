@@ -86,7 +86,14 @@ pub struct RepositoryConfiguration {
 
 #[derive(RustcDecodable, RustcEncodable, PartialOrd, Eq, PartialEq, Clone)]
 /// A tuple struct to hold passwords. Implements `fmt::Display` and `fmt::Debug` to not leak during printing
-pub struct Password(String);
+pub struct Password(pub String);
+
+impl Password {
+    /// Create a new password struct
+    pub fn new(password: &str) -> Password {
+        Password(password.to_string())
+    }
+}
 
 impl fmt::Display for Password {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

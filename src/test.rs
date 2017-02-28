@@ -1,4 +1,6 @@
 use std::path::Path;
+use std::str::FromStr;
+
 use tempdir::TempDir;
 use url::Url;
 
@@ -70,7 +72,7 @@ pub fn config_init(tempdir: &TempDir) -> ::RepositoryConfiguration {
         fetch_refspecs: vec![],
         push_refspecs: vec![],
         username: Some("foobar".to_string()),
-        password: Some("password".to_string()),
+        password: Some(::Password::from_str("password").unwrap()),
         key: Some("/path/to/some.key".to_string()),
         key_passphrase: None,
         signature_name: None,

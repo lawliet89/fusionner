@@ -33,7 +33,9 @@ pub struct Merger<'repo, 'cb> {
     merge_reference_namer: MergeReferenceNamer<'cb>,
 }
 
-type Merges = HashMap<String, Merge>;
+/// A HashMap of `Merge` where the key is a `String` corresponding to the `target_reference` of the merge.
+/// This ensures that only one merge commit per `target_reference` is tracked.
+pub type Merges = HashMap<String, Merge>;
 
 /// A `Note` is stored for each commit on the topic branches' current head
 #[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]

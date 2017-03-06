@@ -33,7 +33,7 @@ pub struct Merger<'repo, 'cb> {
     merge_reference_namer: MergeReferenceNamer<'cb>,
 }
 
-/// A HashMap of `Merge` where the key is a `String` corresponding to the `target_reference` of the merge.
+/// A `HashMap` of `Merge` where the key is a `String` corresponding to the `target_reference` of the merge.
 /// This ensures that only one merge commit per `target_reference` is tracked.
 pub type Merges = HashMap<String, Merge>;
 
@@ -155,7 +155,7 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
         Ok(Merger {
             repository: repository,
             remote: remote,
-            namespace: namespace.or(Some(DEFAULT_NOTES_NAMESPACE)).unwrap().to_string(),
+            namespace: namespace.or_else(|| Some(DEFAULT_NOTES_NAMESPACE)).unwrap().to_string(),
             merge_reference_namer: merge_reference_namer.or(Some(MergeReferenceNamer::Default)).unwrap(),
         })
     }
@@ -181,8 +181,8 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
         let notes_ref = self.notes_reference();
         let note = self.repository.repository.find_note(Some(&notes_ref), oid)?;
         note.message()
-            .ok_or(git_err!(&"Invalid message in note for oid"))
-            .and_then(|note| utils::deserialize_toml(&note).map_err(|e| git_err!(&e)))
+            .ok_or_else(|| git_err!(&"Invalid message in note for oid"))
+            .and_then(|note| utils::deserialize_toml(note).map_err(|e| git_err!(&e)))
     }
 
     /// Add note for the OID. Will serialise to TOML before storage. Returns OID of note.
@@ -221,13 +221,13 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
         let note = self.find_note(oid);
         debug!("Note search result: {:?}", note);
 
-        if let Err(_) = note {
+        if note.is_err() {
             return ShouldMergeResult::Merge(None);
         }
 
         let note = note.unwrap();
         let matching_merges = note.find_matching_merges(target_oid);
-        if matching_merges.len() == 0 {
+        if matching_merges.is_empty() {
             ShouldMergeResult::Merge(Some(note.clone()))
         } else {
             match matching_merges.get(&target_reference.to_string()) {
@@ -236,7 +236,7 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
                         .resolve(reference, target_reference, oid, target_oid);
                     let &&Merge { ref merge_oid, .. } = matching_merges.values().take(1).collect::<Vec<_>>()[0];
                     // should be safe to unwrap
-                    let merge_oid = git2::Oid::from_str(&merge_oid).unwrap();
+                    let merge_oid = git2::Oid::from_str(merge_oid).unwrap();
                     let proposed_merge = Merge::new(merge_oid,
                                                     target_oid,
                                                     target_reference,
@@ -328,12 +328,12 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
         let merge = match should_merge {
             ShouldMergeResult::Merge(ref note) => {
                 info!("Performing merge");
-                let merge = self.merge(oid, target_oid, &reference, target_ref)?;
+                let merge = self.merge(oid, target_oid, reference, target_ref)?;
                 push_reference.push(merge.merge_reference.to_string());
 
-                let note = match note {
-                    &None => Note::new_with_merge(merge.clone()),
-                    &Some(ref note) => {
+                let note = match *note {
+                    None => Note::new_with_merge(merge.clone()),
+                    Some(ref note) => {
                         let mut note = note.clone();
                         note.append_with_merge(merge.clone());
                         note
@@ -347,9 +347,9 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
             ShouldMergeResult::ExistingMergeInSameTargetReference(ref note) => {
                 info!("Merge commit is up to date");
                 // Should be safe to unwrap
-                let merge = note.merges.get(target_ref).unwrap().clone();
+                let merge = note.merges[target_ref].clone();
                 // Fetch merge
-                let fetch_refspec = [::git::RefspecStr::to_forced(&merge.merge_reference)];
+                let fetch_refspec = [::git::RefspecStr::as_forced(&merge.merge_reference)];
                 self.remote.fetch(&utils::as_str_slice(&fetch_refspec))?;
                 merge
             }
@@ -360,7 +360,7 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
                 info!("Adding note: {:?}", note);
                 self.add_note(&note, oid)?;
                 // Fetch merge
-                let fetch_refspec = [::git::RefspecStr::to_forced(&proposed_merge.merge_reference)];
+                let fetch_refspec = [::git::RefspecStr::as_forced(&proposed_merge.merge_reference)];
                 self.remote.fetch(&utils::as_str_slice(&fetch_refspec))?;
                 proposed_merge.clone()
             }
@@ -368,7 +368,7 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
 
         if push {
             let refspecs: Vec<String> = push_reference.iter()
-                .map(|s| ::git::RefspecStr::to_forced(s))
+                .map(|s| ::git::RefspecStr::as_forced(s))
                 .collect();
             let refspecs_slice: Vec<&str> = refspecs.iter().map(|s| &**s).collect();
             info!("Pushing to {:?}", refspecs);
@@ -454,14 +454,14 @@ impl Merge {
 impl<'cb> MergeReferenceNamer<'cb> {
     /// Returns the name of the merge reference based on the rules provided.
     pub fn resolve(&self, reference: &str, target_reference: &str, oid: git2::Oid, target_oid: git2::Oid) -> String {
-        match self {
-            &MergeReferenceNamer::Default => {
+        match *self {
+            MergeReferenceNamer::Default => {
                 format!("{}/{}/{}",
                         DEFAULT_NERGE_REFERENCE_BASE,
                         Self::reference_last_item(reference),
                         Self::reference_last_item(target_reference))
             }
-            &MergeReferenceNamer::Custom(ref cb) => cb(reference, target_reference, oid, target_oid),
+            MergeReferenceNamer::Custom(ref cb) => cb(reference, target_reference, oid, target_oid),
         }
     }
 
@@ -484,10 +484,10 @@ impl<'cb> MergeReferenceNamer<'cb> {
 
 impl fmt::Display for ShouldMergeResult {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let formatted = match self {
-            &ShouldMergeResult::Merge(_) => "Merge required",
-            &ShouldMergeResult::ExistingMergeInSameTargetReference { .. } => "An up to date merge exists",
-            &ShouldMergeResult::ExistingMergeInDifferentTargetReference { .. } => {
+        let formatted = match *self {
+            ShouldMergeResult::Merge(_) => "Merge required",
+            ShouldMergeResult::ExistingMergeInSameTargetReference { .. } => "An up to date merge exists",
+            ShouldMergeResult::ExistingMergeInDifferentTargetReference { .. } => {
                 "A merge under another target reference exists"
             }
         };

@@ -208,7 +208,7 @@ impl<'repo> Repository<'repo> {
         info!("Cloning repository from {} into {}",
               repo_details.uri,
               repo_details.checkout_path);
-        repo_builder.clone(&repo_details.uri, &Path::new(&repo_details.checkout_path))
+        repo_builder.clone(&repo_details.uri, Path::new(&repo_details.checkout_path))
             .and_then(|repo| Ok(Repository::new(repo, repo_details)))
     }
 
@@ -420,18 +420,18 @@ impl<'repo> Remote<'repo> {
 
     /// Add refspec for the remote, if they don't exist.
     pub fn add_refspec(&self, refspec: &str, direction: git2::Direction) -> Result<(), git2::Error> {
-        let remote_name = self.name().ok_or(git2::Error::from_str("Un-named remote used"))?;
+        let remote_name = self.name().ok_or_else(|| git2::Error::from_str("Un-named remote used"))?;
 
         info!("Checking and adding refspec {}", refspec);
-        if let None = Remote::find_matching_refspec(self.refspecs(), direction, refspec) {
+        if Remote::find_matching_refspec(self.refspecs(), direction, refspec).is_none() {
             match direction {
                 git2::Direction::Fetch => {
                     info!("No existing fetch refpec found: adding {}", refspec);
-                    self.repository.repository.remote_add_fetch(remote_name, &refspec)
+                    self.repository.repository.remote_add_fetch(remote_name, refspec)
                 }
                 git2::Direction::Push => {
                     info!("No existing push refpec found: adding {}", refspec);
-                    self.repository.repository.remote_add_push(remote_name, &refspec)
+                    self.repository.repository.remote_add_push(remote_name, refspec)
                 }
             }
         } else {
@@ -451,23 +451,22 @@ impl<'repo> Remote<'repo> {
     /// If `None` is provided, will attempt to resolve the remote's `HEAD` (usually `refs/heads/master`)
     pub fn resolve_target_ref(&mut self, target_ref: Option<&str>) -> Result<String, git2::Error> {
         match target_ref {
-            Some(reference) if reference != "HEAD" => {
+            None | Some("HEAD") => {
+                match self.head()? {
+                    None => Err(git_err!("Could not find a default HEAD on remote")),
+                    Some(head) => {
+                        info!("Target Reference set to remote HEAD: {}", head);
+                        Ok(head)
+                    }
+                }
+            }
+            Some(reference) => {
                 info!("Target Reference Specified: {}", reference);
                 let remote_refs = self.remote_ls()?;
-                if let None = remote_refs.iter().find(|head| &head.name == reference) {
+                if remote_refs.iter().find(|head| &head.name == reference).is_none() {
                     return Err(git_err!(&format!("Could not find {} on remote", reference)));
                 }
                 Ok(reference.to_string())
-            }
-            None | Some(_) => {
-                // matches Some("HEAD")
-                let head = self.head()?;
-                if let None = head {
-                    return Err(git_err!("Could not find a default HEAD on remote"));
-                }
-                let head = head.unwrap();
-                info!("Target Reference set to remote HEAD: {}", head);
-                Ok(head)
             }
         }
     }
@@ -488,8 +487,7 @@ impl<'repo> Remote<'repo> {
         use git2::Direction::*;
 
         match (left, right) {
-            (&Fetch, &Fetch) => true,
-            (&Push, &Push) => true,
+            (&Fetch, &Fetch) | (&Push, &Push) => true,
             _ => false,
         }
     }
@@ -498,10 +496,11 @@ impl<'repo> Remote<'repo> {
 impl RefspecStr {
     /// Construct this struct from a `&str`.
     pub fn from_str(refspec: &str) -> RefspecStr {
-        let force = refspec.starts_with("+");
-        let refspec = match force {
-            false => refspec.to_string(),
-            true => refspec[1..].to_string(),
+        let force = refspec.starts_with('+');
+        let refspec = if force {
+            refspec[1..].to_string()
+        } else {
+            refspec.to_string()
         };
 
         RefspecStr {
@@ -527,9 +526,10 @@ impl RefspecStr {
 
     /// Converts the struct to a String.
     pub fn to_string(&self) -> String {
-        match self.force {
-            true => format!("+{}", self.refspec).to_string(),
-            false => self.refspec.to_string(),
+        if self.force {
+            format!("+{}", self.refspec).to_string()
+        } else {
+            self.refspec.to_string()
         }
     }
 
@@ -556,10 +556,10 @@ impl RefspecStr {
     /// use fusionner::git::RefspecStr;
     ///
     /// let refspec = "refs/heads/master:refs/remote/origin/heads/master";
-    /// let forced = RefspecStr::to_forced(refspec);
+    /// let forced = RefspecStr::as_forced(refspec);
     /// assert_eq!("+refs/heads/master:refs/remote/origin/heads/master", forced);
     /// ```
-    pub fn to_forced(refspec: &str) -> String {
+    pub fn as_forced(refspec: &str) -> String {
         let mut refspec = Self::from_str(refspec);
         refspec.set_force(true);
         refspec.to_string()
@@ -795,12 +795,12 @@ mod tests {
     #[test]
     fn refspec_str_forced_works_correctly() {
         let refspec = "refs/heads/master:refs/remotes/origin/heads/master";
-        let r = RefspecStr::to_forced(refspec);
+        let r = RefspecStr::as_forced(refspec);
         assert_eq!("+refs/heads/master:refs/remotes/origin/heads/master",
                    r.to_string());
 
         let refspec = "+refs/heads/master:refs/remotes/origin/heads/master";
-        let r = RefspecStr::to_forced(refspec);
+        let r = RefspecStr::as_forced(refspec);
         assert_eq!("+refs/heads/master:refs/remotes/origin/heads/master",
                    r.to_string());
     }

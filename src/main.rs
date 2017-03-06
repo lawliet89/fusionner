@@ -109,7 +109,7 @@ fn main() {
             .and_then(|d| d.decode())
             .unwrap_or_else(|e| e.exit());
 
-        let logger_config = configure_logger(Some(args.flag_log_level.clone()));
+        let logger_config = configure_logger(&Some(args.flag_log_level.clone()));
         if let Err(e) = fern::init_global_logger(logger_config, log::LogLevelFilter::Debug) {
             panic!("Failed to initialize global logger: {}", e);
         }
@@ -134,9 +134,9 @@ fn main() {
 
         return_code = match process(&config,
                                     &watch_refs,
-                                    Some(args.flag_target_reference),
-                                    Some(args.flag_remote),
-                                    Some(args.flag_notes_namespace)) {
+                                    &Some(args.flag_target_reference),
+                                    &Some(args.flag_remote),
+                                    &Some(args.flag_notes_namespace)) {
             Ok(_) => 0,
             Err(err) => {
                 error!("Error: {}", err);
@@ -150,9 +150,9 @@ fn main() {
 
 fn process(config: &Config,
            watch_refs: &WatchReferences,
-           target_ref: Option<String>,
-           remote_name: Option<String>,
-           notes_namespace: Option<String>)
+           target_ref: &Option<String>,
+           remote_name: &Option<String>,
+           notes_namespace: &Option<String>)
            -> Result<(), String> {
     // Create our structs
     let repo = map_err!(git::Repository::clone_or_open(&config.repository))?;
@@ -182,8 +182,6 @@ fn process(config: &Config,
         info!("Sleeping for {:?} seconds", interal_seconds);
         std::thread::sleep(interval);
     }
-
-    Ok(())
 }
 
 fn process_loop(remote: &mut git::Remote,
@@ -211,7 +209,7 @@ fn process_loop(remote: &mut git::Remote,
 
     {
         let forced_fetch_refs: Vec<String> = fetch_refs.iter()
-            .map(|s| git::RefspecStr::to_forced(s))
+            .map(|s| git::RefspecStr::as_forced(s))
             .collect();
         let forced_fetch_refs_slice: Vec<&str> = forced_fetch_refs.iter().map(|s| &**s).collect();
 
@@ -221,12 +219,12 @@ fn process_loop(remote: &mut git::Remote,
     info!("Resolving references and oid");
     let oids: HashMap<String, git2::Oid> = resolve_oids(fetch_refs.as_slice(), remote_ls.as_slice())
         .iter()
-        .filter(|&(reference, oid)| match oid {
-            &None => {
+        .filter(|&(reference, oid)| match *oid {
+            None => {
                 warn!("No OID found for reference {}", reference);
                 false
             }
-            &Some(_) => true,
+            Some(_) => true,
         })
         .map(|(reference, oid)| (reference.to_string(), oid.unwrap()))
         .collect();
@@ -234,7 +232,8 @@ fn process_loop(remote: &mut git::Remote,
     debug!("{:?}", oids);
 
     info!("Resolving reference and OID for target reference");
-    let target_oid = resolve_oid(target_ref, &remote_ls).ok_or(git_err!("Unable to find OID for target reference"))?;
+    let target_oid =
+        resolve_oid(target_ref, &remote_ls).ok_or_else(|| git_err!("Unable to find OID for target reference"))?;
 
     info!("Fetching notes for commits");
     merger.fetch_notes()?;
@@ -256,7 +255,7 @@ fn process_loop(remote: &mut git::Remote,
 }
 
 // TODO: Support logging to file/stderr/etc.
-fn configure_logger<'a>(log_level: Option<String>) -> fern::DispatchConfig<'a> {
+fn configure_logger<'a>(log_level: &Option<String>) -> fern::DispatchConfig<'a> {
     let log_level = resolve_log_level(&log_level)
         .or_else(|| {
             panic!("Unknown log level `{}``", log_level.as_ref().unwrap());
@@ -324,7 +323,7 @@ mod tests {
                 key_passphrase: Some(Password::new("Such a password")),
                 signature_name: Some("Foobar".to_string()),
                 signature_email: Some("foo@bar.xyz".to_string()),
-            }
+            },
         };
 
         assert_eq!(config, expected_config);

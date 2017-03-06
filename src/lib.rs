@@ -150,7 +150,7 @@ impl WatchReferences {
 
     /// Given a set of Remote heads as advertised by the remote, return a set of remtoe heads
     /// which exist based on the watch references
-    pub fn resolve_watch_refs(&self, remote_ls: &Vec<git::RemoteHead>) -> HashSet<String> {
+    pub fn resolve_watch_refs(&self, remote_ls: &[git::RemoteHead]) -> HashSet<String> {
         let mut refs = HashSet::new();
 
         // Flatten and resolve symbolic targets

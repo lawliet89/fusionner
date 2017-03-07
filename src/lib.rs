@@ -12,6 +12,12 @@
 //!
 //! If your `master` branch has moved on, `fusionner` will update the merge commit with the new commits from `master`.
 //!
+//! ## Prior Art
+//!
+//! `fusionner` is inspired by [bors](https://github.com/graydon/bors) and 
+//! [`refs/pul/xxx/merge`](https://help.github.com/articles/checking-out-pull-requests-locally/) references that 
+//! Github provides.
+//!
 //! ## Usage
 //!
 //! If you are looking for usage, refer to the [repository](https://github.com/lawliet89/fusionner). This documentation

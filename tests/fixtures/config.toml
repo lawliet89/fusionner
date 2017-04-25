@@ -4,6 +4,7 @@ interval = 60
 uri = "https://github.com/lawliet89/fusionner.git"
 checkout_path = "target/test_repo"
 fetch_refspecs = ["+refs/pull/*:refs/remotes/origin/pull/*"]
+push_refspecs = []
 username = "john doe"
 password = { password = "P@ssword!" }
 key = "/home/user/.ssh/key"

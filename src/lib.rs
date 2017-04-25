@@ -21,15 +21,19 @@
 #![deny(missing_docs)]
 #![doc(test(attr(allow(unused_variables), deny(warnings))))]
 
-extern crate git2;
-extern crate libgit2_sys as git2_raw;
 #[macro_use]
 extern crate log;
+#[macro_use]
+extern crate serde_derive;
+
+extern crate git2;
+extern crate libgit2_sys as git2_raw;
 extern crate regex;
+extern crate serde;
+extern crate toml;
+
 #[cfg(test)]
 extern crate rand;
-extern crate rustc_serialize;
-extern crate toml;
 #[cfg(test)]
 extern crate tempdir;
 #[cfg(test)]
@@ -52,7 +56,7 @@ use std::vec::Vec;
 
 use regex::RegexSet;
 
-#[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
+#[derive(Deserialize, Serialize, Eq, PartialEq, Clone, Debug)]
 /// Configuration struct for the repository
 pub struct RepositoryConfiguration {
     /// URI to the repository remote.
@@ -84,7 +88,7 @@ pub struct RepositoryConfiguration {
     pub signature_email: Option<String>,
 }
 
-#[derive(RustcDecodable, RustcEncodable, PartialOrd, Eq, PartialEq, Clone)]
+#[derive(Deserialize, Serialize, PartialOrd, Eq, PartialEq, Clone)]
 /// A tuple struct to hold passwords. Implements `fmt::Display` and `fmt::Debug` to not leak during printing
 pub struct Password {
     /// The wrapped password string

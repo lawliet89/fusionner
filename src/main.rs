@@ -1,14 +1,19 @@
-extern crate fusionner;
-extern crate docopt;
-extern crate fern;
-extern crate git2;
-extern crate libgit2_sys as git2_raw;
 #[macro_use]
 extern crate log;
+#[macro_use]
+extern crate serde_derive;
+
+extern crate docopt;
+extern crate fern;
+extern crate fusionner;
+extern crate git2;
+extern crate libgit2_sys as git2_raw;
 extern crate regex;
 extern crate rustc_serialize;
+extern crate serde;
 extern crate time;
 extern crate toml;
+
 #[cfg(test)]
 extern crate tempdir;
 #[cfg(test)]
@@ -61,7 +66,7 @@ struct Args {
     arg_watch_ref: Vec<String>,
 }
 
-#[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
+#[derive(Deserialize, Serialize, Eq, PartialEq, Clone, Debug)]
 /// Configuration for fusionner
 pub struct Config {
     /// Repository configuration

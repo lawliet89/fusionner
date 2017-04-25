@@ -83,7 +83,8 @@ impl Config {
         info!("Reading configuration from '{}'", path);
         let mut file = File::open(&path).map_err(|e| format!("{:?}", e))?;
         let mut config_toml = String::new();
-        file.read_to_string(&mut config_toml).map_err(|e| format!("{:?}", e))?;
+        file.read_to_string(&mut config_toml)
+            .map_err(|e| format!("{:?}", e))?;
 
         utils::deserialize_toml(&config_toml)
     }
@@ -123,17 +124,17 @@ fn main() {
 
         let config = Config::read_config(&args.arg_configuration_file)
             .map_err(|err| {
-                panic!("Failed to read configuration file {}: {}",
-                       &args.arg_configuration_file,
-                       err)
-            })
+                         panic!("Failed to read configuration file {}: {}",
+                                &args.arg_configuration_file,
+                                err)
+                     })
             .unwrap();
         debug!("Configuration parsed {:?}", config);
 
         let watch_refs = WatchReferences::new(args.arg_watch_ref.as_slice(),
                                               args.flag_watch_regex.as_slice())
-            .map_err(|err| panic!("Failed to compile watch reference regex: {:?}", err))
-            .unwrap();
+                .map_err(|err| panic!("Failed to compile watch reference regex: {:?}", err))
+                .unwrap();
 
         info!("Watch Referemces: {:?}", watch_refs);
 
@@ -209,11 +210,15 @@ fn process_loop(remote: &mut git::Remote,
     debug!("{:?}", watch_heads);
 
     info!("Fetching matched remotes and target reference");
-    let mut fetch_refs = watch_heads.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
+    let mut fetch_refs = watch_heads
+        .iter()
+        .map(|s| s.as_str())
+        .collect::<Vec<&str>>();
     fetch_refs.push(target_ref);
 
     {
-        let forced_fetch_refs: Vec<String> = fetch_refs.iter()
+        let forced_fetch_refs: Vec<String> = fetch_refs
+            .iter()
             .map(|s| git::RefspecStr::as_forced(s))
             .collect();
         let forced_fetch_refs_slice: Vec<&str> = forced_fetch_refs.iter().map(|s| &**s).collect();
@@ -225,20 +230,20 @@ fn process_loop(remote: &mut git::Remote,
     let oids: HashMap<String, git2::Oid> = resolve_oids(fetch_refs.as_slice(), remote_ls.as_slice())
         .iter()
         .filter(|&(reference, oid)| match *oid {
-            None => {
-                warn!("No OID found for reference {}", reference);
-                false
-            }
-            Some(_) => true,
-        })
+                    None => {
+            warn!("No OID found for reference {}", reference);
+            false
+        }
+                    Some(_) => true,
+                })
         .map(|(reference, oid)| (reference.to_string(), oid.unwrap()))
         .collect();
     let oids = return_if_empty!(oids, git_err!("No valid OIDs resolved"));
     debug!("{:?}", oids);
 
     info!("Resolving reference and OID for target reference");
-    let target_oid =
-        resolve_oid(target_ref, &remote_ls).ok_or_else(|| git_err!("Unable to find OID for target reference"))?;
+    let target_oid = resolve_oid(target_ref, &remote_ls)
+        .ok_or_else(|| git_err!("Unable to find OID for target reference"))?;
 
     info!("Fetching notes for commits");
     merger.fetch_notes()?;
@@ -263,17 +268,17 @@ fn process_loop(remote: &mut git::Remote,
 fn configure_logger<'a>(log_level: &Option<String>) -> fern::DispatchConfig<'a> {
     let log_level = resolve_log_level(&log_level)
         .or_else(|| {
-            panic!("Unknown log level `{}``", log_level.as_ref().unwrap());
-        })
+                     panic!("Unknown log level `{}``", log_level.as_ref().unwrap());
+                 })
         .unwrap();
 
     fern::DispatchConfig {
         format: Box::new(|msg: &str, level: &log::LogLevel, _location: &log::LogLocation| {
-            format!("[{}][{}] {}",
-                    time::now().strftime("%FT%T%z").unwrap(),
-                    level,
-                    msg)
-        }),
+                             format!("[{}][{}] {}",
+                                     time::now().strftime("%FT%T%z").unwrap(),
+                                     level,
+                                     msg)
+                         }),
         output: vec![fern::OutputConfig::stdout()],
         level: log_level,
     }
@@ -291,7 +296,8 @@ fn resolve_log_level(log_level: &Option<String>) -> Option<log::LogLevelFilter> 
 }
 
 fn resolve_oids(references: &[&str], remote_ls: &[git::RemoteHead]) -> HashMap<String, Option<git2::Oid>> {
-    references.iter()
+    references
+        .iter()
         .map(|reference| (reference.to_string(), resolve_oid(reference, remote_ls)))
         .collect()
 }

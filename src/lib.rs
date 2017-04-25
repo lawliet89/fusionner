@@ -14,8 +14,8 @@
 //!
 //! ## Prior Art
 //!
-//! `fusionner` is inspired by [bors](https://github.com/graydon/bors) and 
-//! [`refs/pul/xxx/merge`](https://help.github.com/articles/checking-out-pull-requests-locally/) references that 
+//! `fusionner` is inspired by [bors](https://github.com/graydon/bors) and
+//! [`refs/pul/xxx/merge`](https://help.github.com/articles/checking-out-pull-requests-locally/) references that
 //! Github provides.
 //!
 //! ## Usage
@@ -153,9 +153,9 @@ impl WatchReferences {
         let regex_set = RegexSet::new(regexes)?;
 
         Ok(WatchReferences {
-            regex_set: regex_set,
-            exact_list: exact_list,
-        })
+               regex_set: regex_set,
+               exact_list: exact_list,
+           })
     }
 
     /// Given a set of Remote heads as advertised by the remote, return a set of remtoe heads

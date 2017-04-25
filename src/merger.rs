@@ -38,7 +38,7 @@ pub struct Merger<'repo, 'cb> {
 pub type Merges = HashMap<String, Merge>;
 
 /// A `Note` is stored for each commit on the topic branches' current head
-#[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
+#[derive(Deserialize, Serialize, Eq, PartialEq, Clone, Debug)]
 pub struct Note {
     /// For human readers to know where this is from. A fixed string.
     pub _note_origin: String,
@@ -52,7 +52,7 @@ pub struct Note {
 }
 
 /// Denotes a single Merge commit for some target reference. Stored in a `Note`.
-#[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
+#[derive(Deserialize, Serialize, Eq, PartialEq, Clone, Debug)]
 pub struct Merge {
     /// The OID for the merge commit
     pub merge_oid: String,

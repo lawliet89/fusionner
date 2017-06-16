@@ -16,14 +16,16 @@ pub fn as_str_slice(input: &[String]) -> Vec<&str> {
 }
 
 pub fn deserialize_toml<T>(toml: &str) -> Result<T, String>
-    where T: DeserializeOwned
+where
+    T: DeserializeOwned,
 {
     toml::from_str(toml).map_err(|e| e.to_string())
 }
 
 #[allow(dead_code)]
 pub fn serialize_toml<T>(obj: &T) -> Result<String, String>
-    where T: Serialize
+where
+    T: Serialize,
 {
     toml::to_string(obj).map_err(|e| e.to_string())
 }

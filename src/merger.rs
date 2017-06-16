@@ -146,23 +146,24 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
     /// let namer = MergeReferenceNamer::Custom(cb);
     /// let merger = Merger::new(&repo, None, None, Some(namer));
     /// ```
-    pub fn new(repository: &'repo Repository<'repo>,
-               remote_name: Option<&str>,
-               namespace: Option<&str>,
-               merge_reference_namer: Option<MergeReferenceNamer<'cb>>)
-               -> Result<Merger<'repo, 'cb>, git2::Error> {
+    pub fn new(
+        repository: &'repo Repository<'repo>,
+        remote_name: Option<&str>,
+        namespace: Option<&str>,
+        merge_reference_namer: Option<MergeReferenceNamer<'cb>>,
+    ) -> Result<Merger<'repo, 'cb>, git2::Error> {
         let remote = repository.remote(remote_name)?;
         Ok(Merger {
-               repository: repository,
-               remote: remote,
-               namespace: namespace
-                   .or_else(|| Some(DEFAULT_NOTES_NAMESPACE))
-                   .unwrap()
-                   .to_string(),
-               merge_reference_namer: merge_reference_namer
-                   .or(Some(MergeReferenceNamer::Default))
-                   .unwrap(),
-           })
+            repository: repository,
+            remote: remote,
+            namespace: namespace
+                .or_else(|| Some(DEFAULT_NOTES_NAMESPACE))
+                .unwrap()
+                .to_string(),
+            merge_reference_namer: merge_reference_namer
+                .or(Some(MergeReferenceNamer::Default))
+                .unwrap(),
+        })
     }
 
     /// Add refspecs to a remote to fetch/push commit notes, specific for fusionner
@@ -170,8 +171,7 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
     pub fn add_note_refspecs(&self) -> Result<(), git2::Error> {
         let refspec = format!("+{0}:{0}", self.notes_reference());
 
-        self.remote
-            .add_refspec(&refspec, git2::Direction::Fetch)?;
+        self.remote.add_refspec(&refspec, git2::Direction::Fetch)?;
         self.remote.add_refspec(&refspec, git2::Direction::Push)
     }
 
@@ -185,12 +185,12 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
     /// Find note for commit. Make sure you have fetched them first
     pub fn find_note(&self, oid: git2::Oid) -> Result<Note, git2::Error> {
         let notes_ref = self.notes_reference();
-        let note = self.repository
-            .repository
-            .find_note(Some(&notes_ref), oid)?;
+        let note = self.repository.repository.find_note(Some(&notes_ref), oid)?;
         note.message()
             .ok_or_else(|| git_err!(&"Invalid message in note for oid"))
-            .and_then(|note| utils::deserialize_toml(note).map_err(|e| git_err!(&e)))
+            .and_then(|note| {
+                utils::deserialize_toml(note).map_err(|e| git_err!(&e))
+            })
     }
 
     /// Add note for the OID. Will serialise to TOML before storage. Returns OID of note.
@@ -198,14 +198,14 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
         let signature = self.repository.signature()?;
         let serialized_note = utils::serialize_toml(&note).map_err(|e| git_err!(&e))?;
 
-        self.repository
-            .repository
-            .note(&signature,
-                  &signature,
-                  Some(&self.notes_reference()),
-                  oid,
-                  &serialized_note,
-                  true)
+        self.repository.repository.note(
+            &signature,
+            &signature,
+            Some(&self.notes_reference()),
+            oid,
+            &serialized_note,
+            true,
+        )
     }
 
     /// Determine if a merge should be made, based on the rules below.
@@ -221,12 +221,13 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
     /// `ShouldMergeResult::ExistingMergeInSameTargetReference`.
     /// 6. Otherwise, we will construct a `proposed_merge` and return
     /// `ShouldMergeResult::ExistingMergeInDifferentTargetReference`.
-    pub fn should_merge(&self,
-                        oid: git2::Oid,
-                        target_oid: git2::Oid,
-                        reference: &str,
-                        target_reference: &str)
-                        -> ShouldMergeResult {
+    pub fn should_merge(
+        &self,
+        oid: git2::Oid,
+        target_oid: git2::Oid,
+        reference: &str,
+        target_reference: &str,
+    ) -> ShouldMergeResult {
         info!("Deciding if we should merge {} into {}", oid, target_oid);
         let note = self.find_note(oid);
         debug!("Note search result: {:?}", note);
@@ -242,16 +243,22 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
         } else {
             match matching_merges.get(&target_reference.to_string()) {
                 None => {
-                    let commit_reference = self.merge_reference_namer
-                        .resolve(reference, target_reference, oid, target_oid);
+                    let commit_reference = self.merge_reference_namer.resolve(
+                        reference,
+                        target_reference,
+                        oid,
+                        target_oid,
+                    );
                     let &&Merge { ref merge_oid, .. } = matching_merges.values().take(1).collect::<Vec<_>>()[0];
                     // should be safe to unwrap
                     let merge_oid = git2::Oid::from_str(merge_oid).unwrap();
-                    let proposed_merge = Merge::new(merge_oid,
-                                                    target_oid,
-                                                    target_reference,
-                                                    &[oid],
-                                                    &commit_reference);
+                    let proposed_merge = Merge::new(
+                        merge_oid,
+                        target_oid,
+                        target_reference,
+                        &[oid],
+                        &commit_reference,
+                    );
                     ShouldMergeResult::ExistingMergeInDifferentTargetReference {
                         note: note.clone(),
                         merges: matching_merges
@@ -271,19 +278,22 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
     ///
     /// In general, you should prefer to use the convenience function `check_and_merge` instead which will do
     /// everything for you. For usage of this function, refer to the source code of `check_and_merge`.
-    pub fn merge(&self,
-                 oid: git2::Oid,
-                 target_oid: git2::Oid,
-                 reference: &str,
-                 target_reference: &str)
-                 -> Result<Merge, git2::Error> {
+    pub fn merge(
+        &self,
+        oid: git2::Oid,
+        target_oid: git2::Oid,
+        reference: &str,
+        target_reference: &str,
+    ) -> Result<Merge, git2::Error> {
         let our_commit = self.repository.repository.find_commit(target_oid)?;
         let their_commit = self.repository.repository.find_commit(oid)?;
 
         debug!("Merging index");
-        let mut merged_index = self.repository
-            .repository
-            .merge_commits(&our_commit, &their_commit, None)?;
+        let mut merged_index = self.repository.repository.merge_commits(
+            &our_commit,
+            &their_commit,
+            None,
+        )?;
         if index_in_conflict(&mut merged_index.iter()) {
             return Err(git_err!("Index is in conflict after merge -- skipping"));
         }
@@ -293,53 +303,59 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
         debug!("Tree OID {}", tree_oid);
         let tree = self.repository.repository.find_tree(tree_oid)?;
 
-        let commit_reference = self.merge_reference_namer
-            .resolve(reference, target_reference, oid, target_oid);
+        let commit_reference = self.merge_reference_namer.resolve(
+            reference,
+            target_reference,
+            oid,
+            target_oid,
+        );
         info!("Merge will be created with reference {}", commit_reference);
-        if let Ok(mut commit_reference_lookup) =
-            self.repository
-                .repository
-                .find_reference(&commit_reference) {
+        if let Ok(mut commit_reference_lookup) = self.repository.repository.find_reference(&commit_reference) {
             info!("Existing reference exists -- deleting");
             commit_reference_lookup.delete()?;
         }
 
         let signature = self.repository.signature()?;
         let commit_message = Merger::merge_commit_message(oid, target_oid, reference, target_reference);
-        let merge_oid = self.repository
-            .repository
-            .commit(Some(&commit_reference),
-                    &signature,
-                    &signature,
-                    &commit_message,
-                    &tree,
-                    &[&our_commit, &their_commit])?;
+        let merge_oid = self.repository.repository.commit(
+            Some(&commit_reference),
+            &signature,
+            &signature,
+            &commit_message,
+            &tree,
+            &[&our_commit, &their_commit],
+        )?;
 
-        Ok(Merge::new(merge_oid,
-                      target_oid,
-                      target_reference,
-                      &[oid],
-                      &commit_reference))
+        Ok(Merge::new(
+            merge_oid,
+            target_oid,
+            target_reference,
+            &[oid],
+            &commit_reference,
+        ))
     }
 
 
     /// Convenience function to check if a merge is required, and merge if needed.
     /// Will fetch remote merge references. Will push, if desired.
     /// This function calls both `should_merge` and `merge`.
-    pub fn check_and_merge(&mut self,
-                           oid: git2::Oid,
-                           target_oid: git2::Oid,
-                           reference: &str,
-                           target_ref: &str,
-                           push: bool)
-                           -> Result<(Merge, ShouldMergeResult), git2::Error> {
+    pub fn check_and_merge(
+        &mut self,
+        oid: git2::Oid,
+        target_oid: git2::Oid,
+        reference: &str,
+        target_ref: &str,
+        push: bool,
+    ) -> Result<(Merge, ShouldMergeResult), git2::Error> {
         let should_merge = self.should_merge(oid, target_oid, reference, target_ref);
-        info!("Merging {} ({}) into {} ({}): {}",
-              reference,
-              oid,
-              target_ref,
-              target_oid,
-              should_merge);
+        info!(
+            "Merging {} ({}) into {} ({}): {}",
+            reference,
+            oid,
+            target_ref,
+            target_oid,
+            should_merge
+        );
         debug!("{:?}", should_merge);
 
         let mut push_reference = vec![self.notes_reference()];
@@ -383,7 +399,9 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
                 info!("Adding note: {:?}", note);
                 self.add_note(&note, oid)?;
                 // Fetch merge
-                let fetch_refspec = [::git::RefspecStr::as_forced(&proposed_merge.merge_reference)];
+                let fetch_refspec = [
+                    ::git::RefspecStr::as_forced(&proposed_merge.merge_reference),
+                ];
                 self.remote.fetch(&utils::as_str_slice(&fetch_refspec))?;
                 proposed_merge.clone()
             }
@@ -402,16 +420,19 @@ impl<'repo, 'cb> Merger<'repo, 'cb> {
         Ok((merge, should_merge))
     }
 
-    fn merge_commit_message(base_oid: git2::Oid,
-                            target_oid: git2::Oid,
-                            reference: &str,
-                            target_reference: &str)
-                            -> String {
-        format!("Merge {0} ({2}) into {1} ({3})",
-                reference,
-                target_reference,
-                base_oid,
-                target_oid)
+    fn merge_commit_message(
+        base_oid: git2::Oid,
+        target_oid: git2::Oid,
+        reference: &str,
+        target_reference: &str,
+    ) -> String {
+        format!(
+            "Merge {0} ({2}) into {1} ({3})",
+            reference,
+            target_reference,
+            base_oid,
+            target_oid
+        )
     }
 
     /// Returns the reference for the notes that fusionner will create, based on the namespace provided when
@@ -433,17 +454,21 @@ impl Note {
 
     /// Convenience function to create a new `Note` with one `Merge`.
     pub fn new_with_merge(merge: Merge) -> Note {
-        Self::new([(merge.target_parent_reference.to_string(), merge)]
-                      .iter()
-                      .cloned()
-                      .collect())
+        Self::new(
+            [(merge.target_parent_reference.to_string(), merge)]
+                .iter()
+                .cloned()
+                .collect(),
+        )
     }
 
     /// Appends `Merge` to the `Note`, preserving the invariant that one `Merge` exists per `target_reference`.
     /// Returns the previous `Merge` if it existed
     pub fn append_with_merge(&mut self, merge: Merge) -> Option<Merge> {
-        self.merges
-            .insert(merge.target_parent_reference.to_string(), merge)
+        self.merges.insert(
+            merge.target_parent_reference.to_string(),
+            merge,
+        )
     }
 
     /// Find `Merge`s in the note tha corresponds to `target_oid`, regardless of their `target_reference`.
@@ -451,24 +476,25 @@ impl Note {
         self.merges
             .iter()
             .filter(|&(_target_parent_reference, merge)| {
-                        let oid = git2::Oid::from_str(&merge.target_parent_oid);
-                        match oid {
-                            Err(_) => false,
-                            Ok(oid) => oid == target_oid,
-                        }
-                    })
+                let oid = git2::Oid::from_str(&merge.target_parent_oid);
+                match oid {
+                    Err(_) => false,
+                    Ok(oid) => oid == target_oid,
+                }
+            })
             .collect()
     }
 }
 
 impl Merge {
     /// Creates a new `Merge`.
-    pub fn new(merge_oid: git2::Oid,
-               target_parent_oid: git2::Oid,
-               target_parent_reference: &str,
-               parents: &[git2::Oid],
-               merge_reference: &str)
-               -> Merge {
+    pub fn new(
+        merge_oid: git2::Oid,
+        target_parent_oid: git2::Oid,
+        target_parent_reference: &str,
+        parents: &[git2::Oid],
+        merge_reference: &str,
+    ) -> Merge {
         Merge {
             merge_oid: format!("{}", merge_oid),
             target_parent_oid: format!("{}", target_parent_oid),
@@ -484,10 +510,12 @@ impl<'cb> MergeReferenceNamer<'cb> {
     pub fn resolve(&self, reference: &str, target_reference: &str, oid: git2::Oid, target_oid: git2::Oid) -> String {
         match *self {
             MergeReferenceNamer::Default => {
-                format!("{}/{}/{}",
-                        DEFAULT_NERGE_REFERENCE_BASE,
-                        Self::reference_last_item(reference),
-                        Self::reference_last_item(target_reference))
+                format!(
+                    "{}/{}/{}",
+                    DEFAULT_NERGE_REFERENCE_BASE,
+                    Self::reference_last_item(reference),
+                    Self::reference_last_item(target_reference)
+                )
             }
             MergeReferenceNamer::Custom(ref cb) => cb(reference, target_reference, oid, target_oid),
         }
@@ -501,9 +529,9 @@ impl<'cb> MergeReferenceNamer<'cb> {
     /// Add the refspecs used in the `Default` namer to the remote.
     pub fn add_default_refspecs(remote: &Remote) -> Result<(), git2::Error> {
         let src = MergeReferenceNamer::default_reference_base();
-        let refspec = remote
-            .generate_refspec(&src, true)
-            .map_err(|e| git_err!(&e))?;
+        let refspec = remote.generate_refspec(&src, true).map_err(
+            |e| git_err!(&e),
+        )?;
         remote.add_refspec(&refspec, git2::Direction::Push)
     }
 
@@ -566,11 +594,13 @@ mod tests {
     }
 
     fn make_merge(oid: git2::Oid, target_oid: git2::Oid, target_reference: &str) -> Merge {
-        Merge::new(oid,
-                   target_oid,
-                   target_reference,
-                   &[],
-                   "refs/fusionner/some-merge")
+        Merge::new(
+            oid,
+            target_oid,
+            target_reference,
+            &[],
+            "refs/fusionner/some-merge",
+        )
     }
 
     fn make_note(oid: git2::Oid, target_oid: git2::Oid, target_reference: &str) -> Note {
@@ -639,23 +669,19 @@ mod tests {
 
         let remote = repo.remote(None).unwrap();
 
-        not_none!(remote
-                      .refspecs()
-                      .find(|r| {
-                                let refspec = r.str();
-                                let direction = git2::Direction::Fetch;
-                                refspec.is_some() && refspec.unwrap() == "+refs/notes/fusionner:refs/notes/fusionner" &&
-                                git::Remote::direction_eq(&r.direction(), &direction)
-                            }));
+        not_none!(remote.refspecs().find(|r| {
+            let refspec = r.str();
+            let direction = git2::Direction::Fetch;
+            refspec.is_some() && refspec.unwrap() == "+refs/notes/fusionner:refs/notes/fusionner" &&
+                git::Remote::direction_eq(&r.direction(), &direction)
+        }));
 
-        not_none!(remote
-                      .refspecs()
-                      .find(|r| {
-                                let refspec = r.str();
-                                let direction = git2::Direction::Push;
-                                refspec.is_some() && refspec.unwrap() == "+refs/notes/fusionner:refs/notes/fusionner" &&
-                                git::Remote::direction_eq(&r.direction(), &direction)
-                            }));
+        not_none!(remote.refspecs().find(|r| {
+            let refspec = r.str();
+            let direction = git2::Direction::Push;
+            refspec.is_some() && refspec.unwrap() == "+refs/notes/fusionner:refs/notes/fusionner" &&
+                git::Remote::direction_eq(&r.direction(), &direction)
+        }));
     }
 
     #[test]
@@ -668,35 +694,42 @@ mod tests {
 
         let remote = repo.remote(None).unwrap();
 
-        not_none!(remote
-                      .refspecs()
-                      .find(|r| {
-                                let refspec = r.str();
-                                let direction = git2::Direction::Fetch;
-                                refspec.is_some() && refspec.unwrap() == "+refs/notes/foobar:refs/notes/foobar" &&
-                                git::Remote::direction_eq(&r.direction(), &direction)
-                            }));
+        not_none!(remote.refspecs().find(|r| {
+            let refspec = r.str();
+            let direction = git2::Direction::Fetch;
+            refspec.is_some() && refspec.unwrap() == "+refs/notes/foobar:refs/notes/foobar" &&
+                git::Remote::direction_eq(&r.direction(), &direction)
+        }));
 
-        not_none!(remote
-                      .refspecs()
-                      .find(|r| {
-                                let refspec = r.str();
-                                let direction = git2::Direction::Push;
-                                refspec.is_some() && refspec.unwrap() == "+refs/notes/foobar:refs/notes/foobar" &&
-                                git::Remote::direction_eq(&r.direction(), &direction)
-                            }));
+        not_none!(remote.refspecs().find(|r| {
+            let refspec = r.str();
+            let direction = git2::Direction::Push;
+            refspec.is_some() && refspec.unwrap() == "+refs/notes/foobar:refs/notes/foobar" &&
+                git::Remote::direction_eq(&r.direction(), &direction)
+        }));
     }
 
     #[test]
     fn correct_merges_are_found_from_note() {
-        let oid = not_err!(git2::Oid::from_str("78314aadffca88c53c91f8e3bea9b6d582504ba6"));
-        let target_oid = not_err!(git2::Oid::from_str("99dbca6642980876d004188b52f01d01d48a82e0"));
+        let oid = not_err!(git2::Oid::from_str(
+            "78314aadffca88c53c91f8e3bea9b6d582504ba6",
+        ));
+        let target_oid = not_err!(git2::Oid::from_str(
+            "99dbca6642980876d004188b52f01d01d48a82e0",
+        ));
 
-        let merges = [("refs/heads/master".to_string(), make_merge(oid, target_oid, "refs/heads/master")),
-                      ("refs/heads/develop".to_string(), make_merge(oid, target_oid, "refs/heads/develop"))]
-                .iter()
-                .cloned()
-                .collect();
+        let merges = [
+            (
+                "refs/heads/master".to_string(),
+                make_merge(oid, target_oid, "refs/heads/master"),
+            ),
+            (
+                "refs/heads/develop".to_string(),
+                make_merge(oid, target_oid, "refs/heads/develop"),
+            ),
+        ].iter()
+            .cloned()
+            .collect();
         let note = Note::new(merges);
         let matching_merges = note.find_matching_merges(target_oid);
         assert_eq!(2, matching_merges.len());
@@ -744,8 +777,8 @@ mod tests {
         let reference = "refs/heads/branch";
         let target_reference = "refs/heads/master";
 
-        let (merge, _should_merge) =
-            not_err!(merger.check_and_merge(branch_oid, oid, reference, target_reference, false));
+        let (merge, _should_merge) = not_err!(merger.check_and_merge(branch_oid, oid, reference,
+                                              target_reference, false));
         assert_eq!(merge.target_parent_oid, format!("{}", oid));
         assert_eq!(merge.target_parent_reference, target_reference);
         assert_eq!(merge.parents_oid, vec![format!("{}", branch_oid)]);
@@ -887,13 +920,13 @@ mod tests {
 
         {
             let namer = MergeReferenceNamer::Custom(Box::new(|reference: &str,
-                                                              target_reference: &str,
-                                                              _oid: git2::Oid,
-                                                              _target_oid: git2::Oid| {
-                                                                 hit.set(true);
+             target_reference: &str,
+             _oid: git2::Oid,
+             _target_oid: git2::Oid| {
+                hit.set(true);
 
-                                                                 format!("{};{}", reference, target_reference)
-                                                             }));
+                format!("{};{}", reference, target_reference)
+            }));
 
             let (td, _raw) = ::test::raw_repo_init();
             let config = ::test::config_init(&td);

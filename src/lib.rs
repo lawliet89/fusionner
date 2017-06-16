@@ -147,15 +147,16 @@ impl WatchReferences {
     /// Create watch references based on a list of exact references, or some regular expressions
     /// that will match to references.
     pub fn new<T: AsRef<str>>(exacts: &[T], regexes: &[T]) -> Result<WatchReferences, regex::Error>
-        where T: std::fmt::Display
+    where
+        T: std::fmt::Display,
     {
         let exact_list = exacts.iter().map(|s| s.to_string()).collect();
         let regex_set = RegexSet::new(regexes)?;
 
         Ok(WatchReferences {
-               regex_set: regex_set,
-               exact_list: exact_list,
-           })
+            regex_set: regex_set,
+            exact_list: exact_list,
+        })
     }
 
     /// Given a set of Remote heads as advertised by the remote, return a set of remtoe heads

@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `fusionner` crate.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, fusionner">
+
+    <title>fusionner - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../normalize.css">
+    <link rel="stylesheet" type="text/css" href="../rustdoc.css">
+    <link rel="stylesheet" type="text/css" href="../main.css">
+    
+
+    
+    
+</head>
+<body class="rustdoc mod">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <nav class="sidebar">
+        
+        <p class='location'>Crate fusionner</p><div class="block items"><ul><li><a href="#modules">Modules</a></li><li><a href="#structs">Structs</a></li></ul></div><p class='location'></p><script>window.sidebarCurrent = {name: 'fusionner', ty: 'mod', relpath: '../'};</script>
+    </nav>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press ‘S’ to search, ‘?’ for more options…"
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content">
+<h1 class='fqn'><span class='in-band'>Crate <a class="mod" href=''>fusionner</a></span><span class='out-of-band'><span id='render-detail'>
+                   <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
+                       [<span class='inner'>&#x2212;</span>]
+                   </a>
+               </span><a class='srclink' href='../src/fusionner/lib.rs.html#1-180' title='goto source code'>[src]</a></span></h1>
+<div class='docblock'><p><a href="https://github.com/lawliet89/fusionner"><code>fusionner</code></a> is French for merge.
+This tool exists to create merge commits between your watched topic branches
+and your target default branch.</p>
+
+<p>These merged commits can then be tested in your CI tool.</p>
+
+<p><img src="https://cdn.rawgit.com/lawliet89/fusionner/0d517230/images/branch_diagram.svg" style="width: 500px;" /></p>
+
+<p>Normally, tests will be run on the commit labelled <code>Pull Request</code>. Ideally, we would like to run tests
+on a merge commit with your <code>master</code> branch. This is what <code>fusionner</code> does!</p>
+
+<p>If your <code>master</code> branch has moved on, <code>fusionner</code> will update the merge commit with the new commits from <code>master</code>.</p>
+
+<h2 id='prior-art' class='section-header'><a href='#prior-art'>Prior Art</a></h2>
+<p><code>fusionner</code> is inspired by <a href="https://github.com/graydon/bors">bors</a> and
+<a href="https://help.github.com/articles/checking-out-pull-requests-locally/"><code>refs/pul/xxx/merge</code></a> references that
+Github provides.</p>
+
+<h2 id='usage' class='section-header'><a href='#usage'>Usage</a></h2>
+<p>If you are looking for usage, refer to the <a href="https://github.com/lawliet89/fusionner">repository</a>. This documentation
+is intended for using fusionner as a library in your Rust application.</p>
+</div><h2 id='modules' class='section-header'><a href="#modules">Modules</a></h2>
+<table>
+                       <tr class=' module-item'>
+                           <td><a class="mod" href="git/index.html"
+                                  title='mod fusionner::git'>git</a></td>
+                           <td class='docblock-short'>
+                                <p>Convenience wrapper around the <a href="https://github.com/alexcrichton/git2-rs"><code>git2-rs</code></a> library</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="mod" href="merger/index.html"
+                                  title='mod fusionner::merger'>merger</a></td>
+                           <td class='docblock-short'>
+                                <p>Contains the logic to create merge commits.</p>
+                           </td>
+                       </tr></table><h2 id='structs' class='section-header'><a href="#structs">Structs</a></h2>
+<table>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.Password.html"
+                                  title='struct fusionner::Password'>Password</a></td>
+                           <td class='docblock-short'>
+                                <p>A tuple struct to hold passwords. Implements <code>fmt::Display</code> and <code>fmt::Debug</code> to not leak during printing</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.RepositoryConfiguration.html"
+                                  title='struct fusionner::RepositoryConfiguration'>RepositoryConfiguration</a></td>
+                           <td class='docblock-short'>
+                                <p>Configuration struct for the repository</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.WatchReferences.html"
+                                  title='struct fusionner::WatchReferences'>WatchReferences</a></td>
+                           <td class='docblock-short'>
+                                <p>Convenience struct to hold references to watch for changes to be merged into some <code>target_reference</code>.</p>
+                           </td>
+                       </tr></table></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <aside id="help" class="hidden">
+        <div>
+            <h1 class="hidden">Help</h1>
+
+            <div class="shortcuts">
+                <h2>Keyboard Shortcuts</h2>
+
+                <dl>
+                    <dt>?</dt>
+                    <dd>Show this help dialog</dd>
+                    <dt>S</dt>
+                    <dd>Focus the search field</dd>
+                    <dt>&larrb;</dt>
+                    <dd>Move up in search results</dd>
+                    <dt>&rarrb;</dt>
+                    <dd>Move down in search results</dd>
+                    <dt>&#9166;</dt>
+                    <dd>Go to active search result</dd>
+                    <dt>+</dt>
+                    <dd>Collapse/expand all sections</dd>
+                </dl>
+            </div>
+
+            <div class="infos">
+                <h2>Search Tricks</h2>
+
+                <p>
+                    Prefix searches with a type followed by a colon (e.g.
+                    <code>fn:</code>) to restrict the search to a given type.
+                </p>
+
+                <p>
+                    Accepted types are: <code>fn</code>, <code>mod</code>,
+                    <code>struct</code>, <code>enum</code>,
+                    <code>trait</code>, <code>type</code>, <code>macro</code>,
+                    and <code>const</code>.
+                </p>
+
+                <p>
+                    Search functions by type signature (e.g.
+                    <code>vec -> usize</code> or <code>* -> vec</code>)
+                </p>
+            </div>
+        </div>
+    </aside>
+
+    
+
+    <script>
+        window.rootPath = "../";
+        window.currentCrate = "fusionner";
+    </script>
+    <script src="../jquery.js"></script>
+    <script src="../main.js"></script>
+    <script defer src="../search-index.js"></script>
+</body>
+</html>

@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `Repository` struct in crate `fusionner`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, Repository">
+
+    <title>fusionner::git::Repository - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../../normalize.css">
+    <link rel="stylesheet" type="text/css" href="../../rustdoc.css">
+    <link rel="stylesheet" type="text/css" href="../../main.css">
+    
+
+    
+    
+</head>
+<body class="rustdoc struct">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <nav class="sidebar">
+        
+        <p class='location'>Struct Repository</p><div class="block items"><ul><li><a href="#fields">Fields</a></li><li><a href="#methods">Methods</a></li></ul></div><p class='location'><a href='../index.html'>fusionner</a>::<wbr><a href='index.html'>git</a></p><script>window.sidebarCurrent = {name: 'Repository', ty: 'struct', relpath: ''};</script><script defer src="sidebar-items.js"></script>
+    </nav>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press ‘S’ to search, ‘?’ for more options…"
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content">
+<h1 class='fqn'><span class='in-band'>Struct <a href='../index.html'>fusionner</a>::<wbr><a href='index.html'>git</a>::<wbr><a class="struct" href=''>Repository</a></span><span class='out-of-band'><span id='render-detail'>
+                   <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
+                       [<span class='inner'>&#x2212;</span>]
+                   </a>
+               </span><a class='srclink' href='../../src/fusionner/git.rs.html#41-45' title='goto source code'>[src]</a></span></h1>
+<pre class='rust struct'>pub struct Repository&lt;'repo&gt; {
+    pub repository: <a class="struct" href="https://docs.rs/git2/0.6/git2/repo/struct.Repository.html" title="struct git2::repo::Repository">Repository</a>,
+    // some fields omitted
+}</pre><div class='docblock'><p>Repository struct to wrap around <code>git2::Repository</code></p>
+
+<h1 id='examples' class='section-header'><a href='#examples'>Examples</a></h1>
+<pre class="rust rust-example-rendered">
+<span class="kw">extern</span> <span class="kw">crate</span> <span class="ident">tempdir</span>;
+<span class="kw">extern</span> <span class="kw">crate</span> <span class="ident">fusionner</span>;
+<span class="kw">use</span> <span class="ident">fusionner</span>::<span class="ident">RepositoryConfiguration</span>;
+<span class="kw">use</span> <span class="ident">fusionner</span>::<span class="ident">git</span>::<span class="ident">Repository</span>;
+<span class="kw">use</span> <span class="ident">tempdir</span>::<span class="ident">TempDir</span>;
+
+<span class="kw">let</span> <span class="ident">td</span> <span class="op">=</span> <span class="ident">TempDir</span>::<span class="ident">new</span>(<span class="string">&quot;checkout&quot;</span>).<span class="ident">unwrap</span>();
+<span class="kw">let</span> <span class="ident">configuration</span> <span class="op">=</span> <span class="ident">RepositoryConfiguration</span> {
+    <span class="ident">uri</span>: <span class="string">&quot;https://github.com/lawliet89/fusionner.git&quot;</span>.<span class="ident">to_string</span>(),
+    <span class="ident">checkout_path</span>: <span class="ident">td</span>.<span class="ident">path</span>().<span class="ident">to_str</span>().<span class="ident">unwrap</span>().<span class="ident">to_string</span>(),
+    <span class="ident">fetch_refspecs</span>: <span class="macro">vec</span><span class="macro">!</span>[],
+    <span class="ident">push_refspecs</span>: <span class="macro">vec</span><span class="macro">!</span>[],
+    <span class="ident">username</span>: <span class="prelude-val">None</span>,
+    <span class="ident">password</span>: <span class="prelude-val">None</span>,
+    <span class="ident">key</span>: <span class="prelude-val">None</span>,
+    <span class="ident">key_passphrase</span>: <span class="prelude-val">None</span>,
+    <span class="ident">signature_name</span>: <span class="prelude-val">None</span>,
+    <span class="ident">signature_email</span>: <span class="prelude-val">None</span>,
+};
+
+<span class="kw">let</span> <span class="ident">repo</span> <span class="op">=</span> <span class="ident">Repository</span>::<span class="ident">clone_or_open</span>(<span class="kw-2">&amp;</span><span class="ident">configuration</span>).<span class="ident">unwrap</span>();</pre>
+</div><h2 id='fields' class='fields'>Fields</h2><span id='structfield.repository' class="structfield">
+                           <span id='repository.v' class='invisible'>
+                           <code>repository: <a class="struct" href="https://docs.rs/git2/0.6/git2/repo/struct.Repository.html" title="struct git2::repo::Repository">Repository</a></code>
+                           </span></span><div class='docblock'><p>The repository struct that is wrapped. Use this to perform operations directly on the repository</p>
+</div><h2 id='methods'>Methods</h2><h3 class='impl'><span class='in-band'><code>impl&lt;'repo&gt; <a class="struct" href="../../fusionner/git/struct.Repository.html" title="struct fusionner::git::Repository">Repository</a>&lt;'repo&gt;</code></span><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../../src/fusionner/git.rs.html#140-335' title='goto source code'>[src]</a></span></h3>
+<div class='impl-items'><h4 id='method.new' class="method"><span id='new.v' class='invisible'><code>fn <a href='#method.new' class='fnname'>new</a>(<br>&nbsp;&nbsp;&nbsp;&nbsp;repository: <a class="struct" href="https://docs.rs/git2/0.6/git2/repo/struct.Repository.html" title="struct git2::repo::Repository">Repository</a>, <br>&nbsp;&nbsp;&nbsp;&nbsp;configuration: &amp;'repo <a class="struct" href="../../fusionner/struct.RepositoryConfiguration.html" title="struct fusionner::RepositoryConfiguration">RepositoryConfiguration</a><br>) -&gt; <a class="struct" href="../../fusionner/git/struct.Repository.html" title="struct fusionner::git::Repository">Repository</a>&lt;'repo&gt;</code></span></h4>
+<div class='docblock'><p>Create a new struct based off a <code>git2::Repository</code> and the corresponding configuration</p>
+
+<h1 id='examples-1' class='section-header'><a href='#examples-1'>Examples</a></h1>
+<pre class="rust rust-example-rendered">
+<span class="kw">extern</span> <span class="kw">crate</span> <span class="ident">git2</span>;
+<span class="kw">extern</span> <span class="kw">crate</span> <span class="ident">fusionner</span>;
+<span class="kw">extern</span> <span class="kw">crate</span> <span class="ident">tempdir</span>;
+
+<span class="kw">use</span> <span class="ident">fusionner</span>::<span class="ident">RepositoryConfiguration</span>;
+<span class="kw">use</span> <span class="ident">fusionner</span>::<span class="ident">git</span>::<span class="ident">Repository</span>;
+<span class="kw">use</span> <span class="ident">tempdir</span>::<span class="ident">TempDir</span>;
+
+<span class="kw">let</span> <span class="ident">td</span> <span class="op">=</span> <span class="ident">TempDir</span>::<span class="ident">new</span>(<span class="string">&quot;checkout&quot;</span>).<span class="ident">unwrap</span>();
+<span class="kw">let</span> <span class="ident">configuration</span> <span class="op">=</span> <span class="ident">RepositoryConfiguration</span> {
+    <span class="ident">uri</span>: <span class="string">&quot;https://github.com/lawliet89/fusionner.git&quot;</span>.<span class="ident">to_string</span>(),
+    <span class="ident">checkout_path</span>: <span class="ident">td</span>.<span class="ident">path</span>().<span class="ident">to_str</span>().<span class="ident">unwrap</span>().<span class="ident">to_string</span>(),
+    <span class="ident">fetch_refspecs</span>: <span class="macro">vec</span><span class="macro">!</span>[],
+    <span class="ident">push_refspecs</span>: <span class="macro">vec</span><span class="macro">!</span>[],
+    <span class="ident">username</span>: <span class="prelude-val">None</span>,
+    <span class="ident">password</span>: <span class="prelude-val">None</span>,
+    <span class="ident">key</span>: <span class="prelude-val">None</span>,
+    <span class="ident">key_passphrase</span>: <span class="prelude-val">None</span>,
+    <span class="ident">signature_name</span>: <span class="prelude-val">None</span>,
+    <span class="ident">signature_email</span>: <span class="prelude-val">None</span>,
+};
+
+<span class="kw">let</span> <span class="ident">repo</span> <span class="op">=</span> <span class="ident">git2</span>::<span class="ident">Repository</span>::<span class="ident">clone</span>(<span class="kw-2">&amp;</span><span class="ident">configuration</span>.<span class="ident">uri</span>, <span class="kw-2">&amp;</span><span class="ident">configuration</span>.<span class="ident">checkout_path</span>)
+    .<span class="ident">and_then</span>(<span class="op">|</span><span class="ident">repo</span><span class="op">|</span> <span class="prelude-val">Ok</span>(<span class="ident">Repository</span>::<span class="ident">new</span>(<span class="ident">repo</span>, <span class="kw-2">&amp;</span><span class="ident">configuration</span>)))
+    .<span class="ident">unwrap</span>();</pre>
+</div><h4 id='method.clone_or_open' class="method"><span id='clone_or_open.v' class='invisible'><code>fn <a href='#method.clone_or_open' class='fnname'>clone_or_open</a>(<br>&nbsp;&nbsp;&nbsp;&nbsp;repo_details: &amp;'repo <a class="struct" href="../../fusionner/struct.RepositoryConfiguration.html" title="struct fusionner::RepositoryConfiguration">RepositoryConfiguration</a><br>) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="../../fusionner/git/struct.Repository.html" title="struct fusionner::git::Repository">Repository</a>&lt;'repo&gt;, <a class="struct" href="https://docs.rs/git2/0.6/git2/error/struct.Error.html" title="struct git2::error::Error">Error</a>&gt;</code></span></h4>
+<div class='docblock'><p>Convenience method to create a new struct by first attempting to open a repository at the checkout path
+configured, and failing that will attempt to clone from the URI configured.</p>
+</div><h4 id='method.open' class="method"><span id='open.v' class='invisible'><code>fn <a href='#method.open' class='fnname'>open</a>(<br>&nbsp;&nbsp;&nbsp;&nbsp;repo_details: &amp;'repo <a class="struct" href="../../fusionner/struct.RepositoryConfiguration.html" title="struct fusionner::RepositoryConfiguration">RepositoryConfiguration</a><br>) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="../../fusionner/git/struct.Repository.html" title="struct fusionner::git::Repository">Repository</a>&lt;'repo&gt;, <a class="struct" href="https://docs.rs/git2/0.6/git2/error/struct.Error.html" title="struct git2::error::Error">Error</a>&gt;</code></span></h4>
+<div class='docblock'><p>Convenience method to create a new struct by attempting to open a repository at the checkout path configured</p>
+</div><h4 id='method.clone' class="method"><span id='clone.v' class='invisible'><code>fn <a href='#method.clone' class='fnname'>clone</a>(<br>&nbsp;&nbsp;&nbsp;&nbsp;repo_details: &amp;'repo <a class="struct" href="../../fusionner/struct.RepositoryConfiguration.html" title="struct fusionner::RepositoryConfiguration">RepositoryConfiguration</a><br>) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="../../fusionner/git/struct.Repository.html" title="struct fusionner::git::Repository">Repository</a>&lt;'repo&gt;, <a class="struct" href="https://docs.rs/git2/0.6/git2/error/struct.Error.html" title="struct git2::error::Error">Error</a>&gt;</code></span></h4>
+<div class='docblock'><p>Convenience method to create a new struct by attempting to clone a repository at a uri to the
+checkout path configured</p>
+</div><h4 id='method.remote' class="method"><span id='remote.v' class='invisible'><code>fn <a href='#method.remote' class='fnname'>remote</a>(&amp;self, remote: <a class="enum" href="https://doc.rust-lang.org/nightly/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;&amp;<a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.str.html">str</a>&gt;) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="../../fusionner/git/struct.Remote.html" title="struct fusionner::git::Remote">Remote</a>, <a class="struct" href="https://docs.rs/git2/0.6/git2/error/struct.Error.html" title="struct git2::error::Error">Error</a>&gt;</code></span></h4>
+<div class='docblock'><p>Returns a <code>Remote</code> struct for the remote with the given name. Defaults to the <code>origin</code> remote.</p>
+</div><h4 id='method.signature' class="method"><span id='signature.v' class='invisible'><code>fn <a href='#method.signature' class='fnname'>signature</a>(&amp;self) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="https://docs.rs/git2/0.6/git2/signature/struct.Signature.html" title="struct git2::signature::Signature">Signature</a>, <a class="struct" href="https://docs.rs/git2/0.6/git2/error/struct.Error.html" title="struct git2::error::Error">Error</a>&gt;</code></span></h4>
+<div class='docblock'><p>Returns a signature struct for use in operations like commit.
+Will first check if this is available in the configuration. If not, we will attempt
+to find the global git configured signature. Failing that, we will use some default fusionner signature</p>
+</div></div></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <aside id="help" class="hidden">
+        <div>
+            <h1 class="hidden">Help</h1>
+
+            <div class="shortcuts">
+                <h2>Keyboard Shortcuts</h2>
+
+                <dl>
+                    <dt>?</dt>
+                    <dd>Show this help dialog</dd>
+                    <dt>S</dt>
+                    <dd>Focus the search field</dd>
+                    <dt>&larrb;</dt>
+                    <dd>Move up in search results</dd>
+                    <dt>&rarrb;</dt>
+                    <dd>Move down in search results</dd>
+                    <dt>&#9166;</dt>
+                    <dd>Go to active search result</dd>
+                    <dt>+</dt>
+                    <dd>Collapse/expand all sections</dd>
+                </dl>
+            </div>
+
+            <div class="infos">
+                <h2>Search Tricks</h2>
+
+                <p>
+                    Prefix searches with a type followed by a colon (e.g.
+                    <code>fn:</code>) to restrict the search to a given type.
+                </p>
+
+                <p>
+                    Accepted types are: <code>fn</code>, <code>mod</code>,
+                    <code>struct</code>, <code>enum</code>,
+                    <code>trait</code>, <code>type</code>, <code>macro</code>,
+                    and <code>const</code>.
+                </p>
+
+                <p>
+                    Search functions by type signature (e.g.
+                    <code>vec -> usize</code> or <code>* -> vec</code>)
+                </p>
+            </div>
+        </div>
+    </aside>
+
+    
+
+    <script>
+        window.rootPath = "../../";
+        window.currentCrate = "fusionner";
+    </script>
+    <script src="../../jquery.js"></script>
+    <script src="../../main.js"></script>
+    <script defer src="../../search-index.js"></script>
+</body>
+</html>

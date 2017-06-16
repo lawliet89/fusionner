@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `merger` mod in crate `fusionner`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, merger">
+
+    <title>fusionner::merger - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../../normalize.css">
+    <link rel="stylesheet" type="text/css" href="../../rustdoc.css">
+    <link rel="stylesheet" type="text/css" href="../../main.css">
+    
+
+    
+    
+</head>
+<body class="rustdoc mod">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <nav class="sidebar">
+        
+        <p class='location'>Module merger</p><div class="block items"><ul><li><a href="#structs">Structs</a></li><li><a href="#enums">Enums</a></li><li><a href="#types">Type Definitions</a></li></ul></div><p class='location'><a href='../index.html'>fusionner</a></p><script>window.sidebarCurrent = {name: 'merger', ty: 'mod', relpath: '../'};</script><script defer src="../sidebar-items.js"></script>
+    </nav>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press ‘S’ to search, ‘?’ for more options…"
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content">
+<h1 class='fqn'><span class='in-band'>Module <a href='../index.html'>fusionner</a>::<wbr><a class="mod" href=''>merger</a></span><span class='out-of-band'><span id='render-detail'>
+                   <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
+                       [<span class='inner'>&#x2212;</span>]
+                   </a>
+               </span><a class='srclink' href='../../src/fusionner/merger.rs.html#1-947' title='goto source code'>[src]</a></span></h1>
+<div class='docblock'><p>Contains the logic to create merge commits.</p>
+
+<p>Metadata from fusionner are stored as <a href="https://git-scm.com/docs/git-notes">git object notes</a>.
+Read <a href="https://git-scm.com/blog/2010/08/25/notes.html">this</a> for an introduction.
+Each commit handled by fusionner will have a <code>Note</code> serialised to TOML stored under some configured
+namespace. The default is <code>fusionner</code>. Each note may contain multiple <code>Merge</code>s.</p>
+
+<p>You can list the notes in your command line by running <code>git notes --ref fusionner list</code>.</p>
+
+<h1 id='terminology' class='section-header'><a href='#terminology'>Terminology</a></h1>
+<p><code>oid</code> and <code>reference</code> refer to the OID and Git reference for the commit that you are intending to merge into
+some <code>target_oid</code> and <code>target_reference</code>. The former pair usually corresponds to some topic branch while the
+latter pair is usually some default branch (i.e. <code>master</code>).</p>
+</div><h2 id='structs' class='section-header'><a href="#structs">Structs</a></h2>
+<table>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.Merge.html"
+                                  title='struct fusionner::merger::Merge'>Merge</a></td>
+                           <td class='docblock-short'>
+                                <p>Denotes a single Merge commit for some target reference. Stored in a <code>Note</code>.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.Merger.html"
+                                  title='struct fusionner::merger::Merger'>Merger</a></td>
+                           <td class='docblock-short'>
+                                <p>Contains the logic to create, and manage merge commits</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.Note.html"
+                                  title='struct fusionner::merger::Note'>Note</a></td>
+                           <td class='docblock-short'>
+                                <p>A <code>Note</code> is stored for each commit on the topic branches&#39; current head</p>
+                           </td>
+                       </tr></table><h2 id='enums' class='section-header'><a href="#enums">Enums</a></h2>
+<table>
+                       <tr class=' module-item'>
+                           <td><a class="enum" href="enum.MergeReferenceNamer.html"
+                                  title='enum fusionner::merger::MergeReferenceNamer'>MergeReferenceNamer</a></td>
+                           <td class='docblock-short'>
+                                <p>Customise how the merge references are named.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="enum" href="enum.ShouldMergeResult.html"
+                                  title='enum fusionner::merger::ShouldMergeResult'>ShouldMergeResult</a></td>
+                           <td class='docblock-short'>
+                                <p>Enum returned by <code>Merger::should_merge</code> depending on the state of affairs</p>
+                           </td>
+                       </tr></table><h2 id='types' class='section-header'><a href="#types">Type Definitions</a></h2>
+<table>
+                       <tr class=' module-item'>
+                           <td><a class="type" href="type.MergeReferenceNamerCallback.html"
+                                  title='type fusionner::merger::MergeReferenceNamerCallback'>MergeReferenceNamerCallback</a></td>
+                           <td class='docblock-short'>
+                                <p>Type for callback implementing custom merge reference naming.
+The meanings for the input arguments are:
+<code>Fn(reference: &amp;str, target_reference: &amp;str, oid: git2::Oid, target_oid: git2::Oid) -&gt; String</code></p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="type" href="type.Merges.html"
+                                  title='type fusionner::merger::Merges'>Merges</a></td>
+                           <td class='docblock-short'>
+                                <p>A <code>HashMap</code> of <code>Merge</code> where the key is a <code>String</code> corresponding to the <code>target_reference</code> of the merge.
+This ensures that only one merge commit per <code>target_reference</code> is tracked.</p>
+                           </td>
+                       </tr></table></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <aside id="help" class="hidden">
+        <div>
+            <h1 class="hidden">Help</h1>
+
+            <div class="shortcuts">
+                <h2>Keyboard Shortcuts</h2>
+
+                <dl>
+                    <dt>?</dt>
+                    <dd>Show this help dialog</dd>
+                    <dt>S</dt>
+                    <dd>Focus the search field</dd>
+                    <dt>&larrb;</dt>
+                    <dd>Move up in search results</dd>
+                    <dt>&rarrb;</dt>
+                    <dd>Move down in search results</dd>
+                    <dt>&#9166;</dt>
+                    <dd>Go to active search result</dd>
+                    <dt>+</dt>
+                    <dd>Collapse/expand all sections</dd>
+                </dl>
+            </div>
+
+            <div class="infos">
+                <h2>Search Tricks</h2>
+
+                <p>
+                    Prefix searches with a type followed by a colon (e.g.
+                    <code>fn:</code>) to restrict the search to a given type.
+                </p>
+
+                <p>
+                    Accepted types are: <code>fn</code>, <code>mod</code>,
+                    <code>struct</code>, <code>enum</code>,
+                    <code>trait</code>, <code>type</code>, <code>macro</code>,
+                    and <code>const</code>.
+                </p>
+
+                <p>
+                    Search functions by type signature (e.g.
+                    <code>vec -> usize</code> or <code>* -> vec</code>)
+                </p>
+            </div>
+        </div>
+    </aside>
+
+    
+
+    <script>
+        window.rootPath = "../../";
+        window.currentCrate = "fusionner";
+    </script>
+    <script src="../../jquery.js"></script>
+    <script src="../../main.js"></script>
+    <script defer src="../../search-index.js"></script>
+</body>
+</html>

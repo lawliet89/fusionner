@@ -1,14 +1,14 @@
 //! This is a utilities module. This is for utilitiy methods shared between the library and binary
 use std::vec::Vec;
 
-use serde::Serialize;
 use serde::de::DeserializeOwned;
+use serde::Serialize;
 use toml;
 
 macro_rules! git_err {
     ($x:expr) => {
         git2::Error::from_str($x)
-    }
+    };
 }
 
 pub fn as_str_slice(input: &[String]) -> Vec<&str> {

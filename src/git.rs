@@ -179,14 +179,13 @@ impl<'repo> Repository<'repo> {
     /// Convenience method to create a new struct by first attempting to open a repository at the checkout path
     /// configured, and failing that will attempt to clone from the URI configured.
     pub fn clone_or_open(repo_details: &'repo RepositoryConfiguration) -> Result<Repository<'repo>, git2::Error> {
-        Repository::open(repo_details).or_else(|err| if err.code() == git2::ErrorCode::NotFound {
-            info!(
-                "Repository not found at {} -- cloning",
-                repo_details.checkout_path
-            );
-            Repository::clone(repo_details)
-        } else {
-            Err(err)
+        Repository::open(repo_details).or_else(|err| {
+            if err.code() == git2::ErrorCode::NotFound {
+                info!("Repository not found at {} -- cloning", repo_details.checkout_path);
+                Repository::clone(repo_details)
+            } else {
+                Err(err)
+            }
         })
     }
 
@@ -209,8 +208,7 @@ impl<'repo> Repository<'repo> {
 
         info!(
             "Cloning repository from {} into {}",
-            repo_details.uri,
-            repo_details.checkout_path
+            repo_details.uri, repo_details.checkout_path
         );
         repo_builder
             .clone(&repo_details.uri, Path::new(&repo_details.checkout_path))
@@ -243,13 +241,11 @@ impl<'repo> Repository<'repo> {
         });
         if cred_type.intersects(git2::CredentialType::USERNAME) && username.is_some() {
             git2::Cred::username(username.as_ref().unwrap())
-        } else if cred_type.intersects(git2::CredentialType::USER_PASS_PLAINTEXT) && username.is_some() &&
-                   repo_details.password.is_some()
+        } else if cred_type.intersects(git2::CredentialType::USER_PASS_PLAINTEXT)
+            && username.is_some()
+            && repo_details.password.is_some()
         {
-            git2::Cred::userpass_plaintext(
-                username.as_ref().unwrap(),
-                repo_details.password.as_ref().unwrap(),
-            )
+            git2::Cred::userpass_plaintext(username.as_ref().unwrap(), repo_details.password.as_ref().unwrap())
         } else if cred_type.intersects(git2::CredentialType::SSH_KEY) && username.is_some() {
             if repo_details.key.is_some() {
                 git2::Cred::ssh_key(
@@ -261,7 +257,6 @@ impl<'repo> Repository<'repo> {
             } else {
                 git2::Cred::ssh_key_from_agent(username.unwrap())
             }
-
         } else {
             let config = git2::Config::open_default()?;
             git2::Cred::credential_helper(&config, &repo_details.uri, username)
@@ -305,9 +300,8 @@ impl<'repo> Repository<'repo> {
     /// Returns a `Remote` struct for the remote with the given name. Defaults to the `origin` remote.
     pub fn remote(&self, remote: Option<&str>) -> Result<Remote, git2::Error> {
         Ok(Remote {
-            remote: self.repository.find_remote(
-                &Repository::remote_name_or_default(remote),
-            )?,
+            remote: self.repository
+                .find_remote(&Repository::remote_name_or_default(remote))?,
             repository: self,
         })
     }
@@ -340,11 +334,7 @@ impl<'repo> Remote<'repo> {
     ) -> Result<git2::RemoteConnection<'repo, 'connection, 'connection>, git2::Error> {
         let callbacks = Repository::remote_callbacks(self.repository.details);
         info!("Connecting to remote");
-        self.remote.connect_auth(
-            git2::Direction::Fetch,
-            Some(callbacks),
-            None,
-        )
+        self.remote.connect_auth(git2::Direction::Fetch, Some(callbacks), None)
     }
 
     /// Disconnect from the remote
@@ -367,20 +357,16 @@ impl<'repo> Remote<'repo> {
         let connection = self.connect()?;
         info!("Retrieving remote references `git ls-remote`");
         let heads = connection.list()?;
-        Ok(
-            heads
-                .iter()
-                .map(|head| {
-                    RemoteHead {
-                        is_local: head.is_local(),
-                        oid: head.oid(),
-                        loid: head.loid(),
-                        name: head.name().to_string(),
-                        symref_target: head.symref_target().map(|s| s.to_string()),
-                    }
-                })
-                .collect(),
-        )
+        Ok(heads
+            .iter()
+            .map(|head| RemoteHead {
+                is_local: head.is_local(),
+                oid: head.oid(),
+                loid: head.loid(),
+                name: head.name().to_string(),
+                symref_target: head.symref_target().map(|s| s.to_string()),
+            })
+            .collect())
     }
 
     /// Get the remote reference of renote HEAD (i.e. default branch)
@@ -396,9 +382,7 @@ impl<'repo> Remote<'repo> {
     pub fn resolve_head(heads: &[git2::RemoteHead]) -> Option<String> {
         heads
             .iter()
-            .find(|head| {
-                head.name() == "HEAD" && head.symref_target().is_some()
-            })
+            .find(|head| head.name() == "HEAD" && head.symref_target().is_some())
             .and_then(|head| Some(head.symref_target().unwrap().to_string()))
     }
 
@@ -406,20 +390,14 @@ impl<'repo> Remote<'repo> {
     pub fn fetch(&mut self, refspecs: &[&str]) -> Result<(), git2::Error> {
         let mut fetch_options = git2::FetchOptions::new();
         let callbacks = Repository::remote_callbacks(self.repository.details);
-        fetch_options.remote_callbacks(callbacks).prune(
-            git2::FetchPrune::On,
-        );
+        fetch_options.remote_callbacks(callbacks).prune(git2::FetchPrune::On);
 
         debug!("Fetching {:?}", refspecs);
         self.remote.fetch(refspecs, Some(&mut fetch_options), None)?;
 
         let mut callbacks = Repository::remote_callbacks(self.repository.details);
-        self.remote.update_tips(
-            Some(&mut callbacks),
-            true,
-            git2::AutotagOption::Unspecified,
-            None,
-        )?;
+        self.remote
+            .update_tips(Some(&mut callbacks), true, git2::AutotagOption::Unspecified, None)?;
 
         self.remote.disconnect();
         Ok(())
@@ -453,26 +431,19 @@ impl<'repo> Remote<'repo> {
 
     /// Add refspec for the remote, if they don't exist.
     pub fn add_refspec(&self, refspec: &str, direction: git2::Direction) -> Result<(), git2::Error> {
-        let remote_name = self.name().ok_or_else(
-            || git2::Error::from_str("Un-named remote used"),
-        )?;
+        let remote_name = self.name()
+            .ok_or_else(|| git2::Error::from_str("Un-named remote used"))?;
 
         info!("Checking and adding refspec {}", refspec);
         if Remote::find_matching_refspec(self.refspecs(), direction, refspec).is_none() {
             match direction {
                 git2::Direction::Fetch => {
                     info!("No existing fetch refpec found: adding {}", refspec);
-                    self.repository.repository.remote_add_fetch(
-                        remote_name,
-                        refspec,
-                    )
+                    self.repository.repository.remote_add_fetch(remote_name, refspec)
                 }
                 git2::Direction::Push => {
                     info!("No existing push refpec found: adding {}", refspec);
-                    self.repository.repository.remote_add_push(
-                        remote_name,
-                        refspec,
-                    )
+                    self.repository.repository.remote_add_push(remote_name, refspec)
                 }
             }
         } else {
@@ -492,23 +463,17 @@ impl<'repo> Remote<'repo> {
     /// If `None` is provided, will attempt to resolve the remote's `HEAD` (usually `refs/heads/master`)
     pub fn resolve_target_ref(&mut self, target_ref: Option<&str>) -> Result<String, git2::Error> {
         match target_ref {
-            None | Some("HEAD") => {
-                match self.head()? {
-                    None => Err(git_err!("Could not find a default HEAD on remote")),
-                    Some(head) => {
-                        info!("Target Reference set to remote HEAD: {}", head);
-                        Ok(head)
-                    }
+            None | Some("HEAD") => match self.head()? {
+                None => Err(git_err!("Could not find a default HEAD on remote")),
+                Some(head) => {
+                    info!("Target Reference set to remote HEAD: {}", head);
+                    Ok(head)
                 }
-            }
+            },
             Some(reference) => {
                 info!("Target Reference Specified: {}", reference);
                 let remote_refs = self.remote_ls()?;
-                if remote_refs
-                    .iter()
-                    .find(|head| &head.name == reference)
-                    .is_none()
-                {
+                if remote_refs.iter().find(|head| &head.name == reference).is_none() {
                     return Err(git_err!(&format!("Could not find {} on remote", reference)));
                 }
                 Ok(reference.to_string())
@@ -593,9 +558,8 @@ impl RefspecStr {
 
     /// Returns the `dest` part of the refspec if it exists
     pub fn dest(&self) -> Option<String> {
-        self.separator_index().map(|index| {
-            self.refspec[(index + 1)..].to_string()
-        })
+        self.separator_index()
+            .map(|index| self.refspec[(index + 1)..].to_string())
     }
 
     /// Convenience function to take a refspec `&str` and turn it into a forced version
@@ -625,10 +589,10 @@ mod tests {
     use std::collections::HashMap;
     use std::vec::Vec;
 
+    use git::{RefspecStr, Remote, Repository};
     use git2;
     use git2_raw;
     use tempdir::TempDir;
-    use git::{Repository, Remote, RefspecStr};
 
     fn to_option_str(opt: &Option<String>) -> Option<&str> {
         opt.as_ref().map(|s| &**s)
@@ -658,24 +622,18 @@ mod tests {
         let (td, _raw) = ::test::raw_repo_init();
         let config = ::test::config_init(&td);
 
-        let test_types: HashMap<git2::CredentialType, git2_raw::git_credtype_t> =
-            [
-                (git2::CredentialType::USERNAME, git2_raw::GIT_CREDTYPE_USERNAME),
-                (
-                    git2::CredentialType::USER_PASS_PLAINTEXT,
-                    git2_raw::GIT_CREDTYPE_USERPASS_PLAINTEXT,
-                ),
-                (git2::CredentialType::SSH_KEY, git2_raw::GIT_CREDTYPE_SSH_KEY),
-            ].iter()
-                .cloned()
-                .collect();
+        let test_types: HashMap<git2::CredentialType, git2_raw::git_credtype_t> = [
+            (git2::CredentialType::USERNAME, git2_raw::GIT_CREDTYPE_USERNAME),
+            (
+                git2::CredentialType::USER_PASS_PLAINTEXT,
+                git2_raw::GIT_CREDTYPE_USERPASS_PLAINTEXT,
+            ),
+            (git2::CredentialType::SSH_KEY, git2_raw::GIT_CREDTYPE_SSH_KEY),
+        ].iter()
+            .cloned()
+            .collect();
         for (requested_cred_type, expected_cred_type) in test_types {
-            let actual_cred = not_err!(Repository::resolve_credentials(
-                &config,
-                "",
-                None,
-                requested_cred_type,
-            ));
+            let actual_cred = not_err!(Repository::resolve_credentials(&config, "", None, requested_cred_type,));
             assert_eq!(expected_cred_type, actual_cred.credtype());
         }
     }
@@ -689,12 +647,7 @@ mod tests {
         let requested_cred_type = git2::CredentialType::SSH_KEY;
         let expected_cred_type = git2_raw::GIT_CREDTYPE_SSH_KEY;
 
-        let actual_cred = not_err!(Repository::resolve_credentials(
-            &config,
-            "",
-            None,
-            requested_cred_type,
-        ));
+        let actual_cred = not_err!(Repository::resolve_credentials(&config, "", None, requested_cred_type,));
         assert_eq!(expected_cred_type, actual_cred.credtype());
     }
 
@@ -723,11 +676,7 @@ mod tests {
 
         for force in [true, false].iter() {
             let force_flag = if *force { "+" } else { "" };
-            let expected_refspec = format!(
-                "{}{}",
-                force_flag,
-                "refs/pulls/*:refs/remotes/origin/pulls/*"
-            );
+            let expected_refspec = format!("{}{}", force_flag, "refs/pulls/*:refs/remotes/origin/pulls/*");
             assert_eq!(
                 expected_refspec,
                 not_err!(remote.generate_refspec("refs/pulls/*", *force))
@@ -766,13 +715,12 @@ mod tests {
 
     #[test]
     fn directions_are_eq_correctly() {
-        let test_values: Vec<(git2::Direction, git2::Direction, bool)> =
-            vec![
-                (git2::Direction::Fetch, git2::Direction::Fetch, true),
-                (git2::Direction::Push, git2::Direction::Push, true),
-                (git2::Direction::Push, git2::Direction::Fetch, false),
-                (git2::Direction::Fetch, git2::Direction::Push, false),
-            ];
+        let test_values: Vec<(git2::Direction, git2::Direction, bool)> = vec![
+            (git2::Direction::Fetch, git2::Direction::Fetch, true),
+            (git2::Direction::Push, git2::Direction::Push, true),
+            (git2::Direction::Push, git2::Direction::Fetch, false),
+            (git2::Direction::Fetch, git2::Direction::Push, false),
+        ];
 
         for (left, right, expected_result) in test_values {
             assert_eq!(expected_result, Remote::direction_eq(&left, &right));
@@ -872,16 +820,10 @@ mod tests {
     fn refspec_str_forced_works_correctly() {
         let refspec = "refs/heads/master:refs/remotes/origin/heads/master";
         let r = RefspecStr::as_forced(refspec);
-        assert_eq!(
-            "+refs/heads/master:refs/remotes/origin/heads/master",
-            r.to_string()
-        );
+        assert_eq!("+refs/heads/master:refs/remotes/origin/heads/master", r.to_string());
 
         let refspec = "+refs/heads/master:refs/remotes/origin/heads/master";
         let r = RefspecStr::as_forced(refspec);
-        assert_eq!(
-            "+refs/heads/master:refs/remotes/origin/heads/master",
-            r.to_string()
-        );
+        assert_eq!("+refs/heads/master:refs/remotes/origin/heads/master", r.to_string());
     }
 }

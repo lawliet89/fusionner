@@ -30,9 +30,9 @@ use std::fs::File;
 use std::io::Read;
 use std::vec::Vec;
 
-use fusionner::*;
-use fusionner::{merger, git};
 use docopt::Docopt;
+use fusionner::*;
+use fusionner::{git, merger};
 
 const USAGE: &'static str = "
 fusionner
@@ -83,38 +83,32 @@ impl Config {
         info!("Reading configuration from '{}'", path);
         let mut file = File::open(&path).map_err(|e| format!("{:?}", e))?;
         let mut config_toml = String::new();
-        file.read_to_string(&mut config_toml).map_err(
-            |e| format!("{:?}", e),
-        )?;
+        file.read_to_string(&mut config_toml).map_err(|e| format!("{:?}", e))?;
 
         utils::deserialize_toml(&config_toml)
     }
 }
 
 macro_rules! return_if_empty {
-    ($x:expr, $err:expr) => {
-        {
-            let x = $x;
-            match x.len() {
-                0 => return Err($err),
-                _ => x
-            }
+    ($x:expr, $err:expr) => {{
+        let x = $x;
+        match x.len() {
+            0 => return Err($err),
+            _ => x,
         }
-    }
+    }};
 }
 
 macro_rules! map_err {
     ($x:expr) => {
         $x.map_err(|e| format!("{:?}", e))
-    }
+    };
 }
 
 fn main() {
     let return_code;
     {
-        let args: Args = Docopt::new(USAGE).and_then(|d| d.decode()).unwrap_or_else(
-            |e| e.exit(),
-        );
+        let args: Args = Docopt::new(USAGE).and_then(|d| d.decode()).unwrap_or_else(|e| e.exit());
 
         let logger_config = configure_logger(&Some(args.flag_log_level.clone()));
         if let Err(e) = fern::init_global_logger(logger_config, log::LogLevelFilter::Debug) {
@@ -127,19 +121,14 @@ fn main() {
             .map_err(|err| {
                 panic!(
                     "Failed to read configuration file {}: {}",
-                    &args.arg_configuration_file,
-                    err
+                    &args.arg_configuration_file, err
                 )
             })
             .unwrap();
         debug!("Configuration parsed {:?}", config);
 
-        let watch_refs = WatchReferences::new(
-            args.arg_watch_ref.as_slice(),
-            args.flag_watch_regex.as_slice(),
-        ).map_err(|err| {
-            panic!("Failed to compile watch reference regex: {:?}", err)
-        })
+        let watch_refs = WatchReferences::new(args.arg_watch_ref.as_slice(), args.flag_watch_regex.as_slice())
+            .map_err(|err| panic!("Failed to compile watch reference regex: {:?}", err))
             .unwrap();
 
         info!("Watch Referemces: {:?}", watch_refs);
@@ -185,9 +174,7 @@ fn process(
     map_err!(merger::MergeReferenceNamer::add_default_refspecs(&remote))?;
 
     map_err!(remote.add_refspecs(
-        &utils::as_str_slice(
-            &config.repository.fetch_refspecs,
-        ),
+        &utils::as_str_slice(&config.repository.fetch_refspecs,),
         git2::Direction::Fetch,
     ))?;
     map_err!(remote.add_refspecs(
@@ -216,7 +203,6 @@ fn process_loop(
     watch_refs: &WatchReferences,
     target_ref: &str,
 ) -> Result<(), git2::Error> {
-
     info!("Retrieving remote heads");
     let remote_ls = return_if_empty!(remote.remote_ls()?, git_err!("No remote references found"));
 
@@ -228,24 +214,15 @@ fn process_loop(
         git_err!("No matching watched reference found")
     );
 
-    info!(
-        "{} remote references matched watch references",
-        watch_heads.len()
-    );
+    info!("{} remote references matched watch references", watch_heads.len());
     debug!("{:?}", watch_heads);
 
     info!("Fetching matched remotes and target reference");
-    let mut fetch_refs = watch_heads
-        .iter()
-        .map(|s| s.as_str())
-        .collect::<Vec<&str>>();
+    let mut fetch_refs = watch_heads.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
     fetch_refs.push(target_ref);
 
     {
-        let forced_fetch_refs: Vec<String> = fetch_refs
-            .iter()
-            .map(|s| git::RefspecStr::as_forced(s))
-            .collect();
+        let forced_fetch_refs: Vec<String> = fetch_refs.iter().map(|s| git::RefspecStr::as_forced(s)).collect();
         let forced_fetch_refs_slice: Vec<&str> = forced_fetch_refs.iter().map(|s| &**s).collect();
 
         remote.fetch(&forced_fetch_refs_slice)?;
@@ -267,9 +244,8 @@ fn process_loop(
     debug!("{:?}", oids);
 
     info!("Resolving reference and OID for target reference");
-    let target_oid = resolve_oid(target_ref, &remote_ls).ok_or_else(|| {
-        git_err!("Unable to find OID for target reference")
-    })?;
+    let target_oid =
+        resolve_oid(target_ref, &remote_ls).ok_or_else(|| git_err!("Unable to find OID for target reference"))?;
 
     info!("Fetching notes for commits");
     merger.fetch_notes()?;
@@ -299,15 +275,8 @@ fn configure_logger<'a>(log_level: &Option<String>) -> fern::DispatchConfig<'a> 
         .unwrap();
 
     fern::DispatchConfig {
-        format: Box::new(|msg: &str,
-         level: &log::LogLevel,
-         _location: &log::LogLocation| {
-            format!(
-                "[{}][{}] {}",
-                time::now().strftime("%FT%T%z").unwrap(),
-                level,
-                msg
-            )
+        format: Box::new(|msg: &str, level: &log::LogLevel, _location: &log::LogLocation| {
+            format!("[{}][{}] {}", time::now().strftime("%FT%T%z").unwrap(), level, msg)
         }),
         output: vec![fern::OutputConfig::stdout()],
         level: log_level,
@@ -328,9 +297,7 @@ fn resolve_log_level(log_level: &Option<String>) -> Option<log::LogLevelFilter> 
 fn resolve_oids(references: &[&str], remote_ls: &[git::RemoteHead]) -> HashMap<String, Option<git2::Oid>> {
     references
         .iter()
-        .map(|reference| {
-            (reference.to_string(), resolve_oid(reference, remote_ls))
-        })
+        .map(|reference| (reference.to_string(), resolve_oid(reference, remote_ls)))
         .collect()
 }
 
@@ -347,8 +314,8 @@ fn to_option_str(opt: &Option<String>) -> Option<&str> {
 
 #[cfg(test)]
 mod tests {
-    use {Config, Password};
     use fusionner::RepositoryConfiguration;
+    use {Config, Password};
 
     #[test]
     fn config_reading_smoke_test() {

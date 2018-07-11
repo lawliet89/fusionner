@@ -50,8 +50,8 @@ mod utils;
 #[cfg(test)]
 #[macro_use]
 mod test;
-pub mod merger;
 pub mod git;
+pub mod merger;
 
 use std::collections::HashSet;
 use std::fmt;
@@ -104,7 +104,9 @@ pub struct Password {
 impl Password {
     /// Create a new password struct
     pub fn new(password: &str) -> Password {
-        Password { password: password.to_string() }
+        Password {
+            password: password.to_string(),
+        }
     }
 }
 

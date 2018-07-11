@@ -241,16 +241,16 @@ impl<'repo> Repository<'repo> {
             Some(ref username) => Some(username),
             None => None,
         });
-        if cred_type.intersects(git2::USERNAME) && username.is_some() {
+        if cred_type.intersects(git2::CredentialType::USERNAME) && username.is_some() {
             git2::Cred::username(username.as_ref().unwrap())
-        } else if cred_type.intersects(git2::USER_PASS_PLAINTEXT) && username.is_some() &&
+        } else if cred_type.intersects(git2::CredentialType::USER_PASS_PLAINTEXT) && username.is_some() &&
                    repo_details.password.is_some()
         {
             git2::Cred::userpass_plaintext(
                 username.as_ref().unwrap(),
                 repo_details.password.as_ref().unwrap(),
             )
-        } else if cred_type.intersects(git2::SSH_KEY) && username.is_some() {
+        } else if cred_type.intersects(git2::CredentialType::SSH_KEY) && username.is_some() {
             if repo_details.key.is_some() {
                 git2::Cred::ssh_key(
                     username.unwrap(),
@@ -660,12 +660,12 @@ mod tests {
 
         let test_types: HashMap<git2::CredentialType, git2_raw::git_credtype_t> =
             [
-                (git2::USERNAME, git2_raw::GIT_CREDTYPE_USERNAME),
+                (git2::CredentialType::USERNAME, git2_raw::GIT_CREDTYPE_USERNAME),
                 (
-                    git2::USER_PASS_PLAINTEXT,
+                    git2::CredentialType::USER_PASS_PLAINTEXT,
                     git2_raw::GIT_CREDTYPE_USERPASS_PLAINTEXT,
                 ),
-                (git2::SSH_KEY, git2_raw::GIT_CREDTYPE_SSH_KEY),
+                (git2::CredentialType::SSH_KEY, git2_raw::GIT_CREDTYPE_SSH_KEY),
             ].iter()
                 .cloned()
                 .collect();
@@ -686,7 +686,7 @@ mod tests {
         let mut config = ::test::config_init(&td);
         config.key = None;
 
-        let requested_cred_type = git2::SSH_KEY;
+        let requested_cred_type = git2::CredentialType::SSH_KEY;
         let expected_cred_type = git2_raw::GIT_CREDTYPE_SSH_KEY;
 
         let actual_cred = not_err!(Repository::resolve_credentials(
